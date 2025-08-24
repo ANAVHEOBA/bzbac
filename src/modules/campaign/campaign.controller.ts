@@ -28,7 +28,7 @@ export const getBySlug = async (req: Request, res: Response) => {
   const campaign = await CampaignModel.findOne(
     { slug },
     {
-      _id: 0,                 
+      _id: 0,
       slug: 1,
       snapVideoUrl: 1,
       fullVideoUrl: 1,
@@ -69,8 +69,8 @@ export const uploadCampaign = async (req: Request, res: Response) => {
       slug,
       snapVideoUrl: previewRes.secure_url,
       fullVideoUrl: fullRes.secure_url,
-      snapThumbnailUrl: previewRes.thumbnail_url,   
-      fullThumbnailUrl: fullRes.thumbnail_url,      
+      snapThumbnailUrl: previewRes.thumbnail_url,
+      fullThumbnailUrl: fullRes.thumbnail_url,
       waLink,
       caption,
     });
@@ -85,10 +85,9 @@ export const uploadCampaign = async (req: Request, res: Response) => {
 export const listPublicLinks = async (_req: Request, res: Response) => {
   try {
     const campaigns = await CampaignModel.find()
-      .select('slug fullVideoUrl fullThumbnailUrl waLink') // ← include
+      .select('slug fullVideoUrl fullThumbnailUrl waLink')
       .sort({ createdAt: -1 });
 
-    // Map so the JSON keys stay lean
     const links = campaigns.map(c => ({
       slug: c.slug,
       fullVideoUrl: c.fullVideoUrl,
@@ -101,3 +100,14 @@ export const listPublicLinks = async (_req: Request, res: Response) => {
   }
 };
 
+/* ---------- DELETE endpoint ---------- */
+export const remove = async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const deleted = await CampaignModel.findOneAndDelete({ slug });
+    if (!deleted) return res.status(404).json({ message: 'Campaign not found' });
+    res.json({ message: 'Campaign deleted', slug });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
