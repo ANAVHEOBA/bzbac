@@ -1,0 +1,29 @@
+# --- Logs & OS junk ---
+*.log
+.DS_Store
+Thumbs.db
+
+# --- Node / build output ---
+node_modules/
+dist/
+*.tsbuildinfo
+
+# --- Runtime secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Uploads / media you don’t want versioned ---
+*.mp4
+*.webm
+*.mov
+*.mkv
+*.avi
+uploads/
+media/
+
+# --- Optional IDE / editor files ---
+.vscode/
+.idea/
+*.swp
+*.swo
