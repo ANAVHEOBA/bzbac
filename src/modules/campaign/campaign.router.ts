@@ -6,7 +6,8 @@ import {
   list,
   getBySlug,
   uploadCampaign,
-  listPublicLinks
+  listPublicLinks,
+  remove
 } from './campaign.controller';
 import { campaignCreateSchema } from './campaign.schema';
 import { validateInput } from '../../middleware/input-validator';
@@ -41,5 +42,8 @@ campaignRouter.get('/:slug', getBySlug);
 
 
 campaignRouter.get('/public/links', listPublicLinks);
+
+
+campaignRouter.delete('/:slug', adminAuth, remove);
 
 export default campaignRouter;
