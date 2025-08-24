@@ -10,7 +10,7 @@ export const createApp = async () => {
   const app = express();
 
   // allow all origins in dev; tighten for prod
-  app.use(cors({ origin: 'http://localhost:4200', credentials: true }));
+  app.use(cors({ origin: ['http://localhost:4200', 'https://bzfront.vercel.app'], credentials: true }));
   app.use(express.json());
 
   app.use('/admin', adminRouter);
