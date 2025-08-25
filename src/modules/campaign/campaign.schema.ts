@@ -3,10 +3,15 @@ import { z } from 'zod';
 
 export const campaignCreateSchema = z.object({
   slug: z.string().trim().min(1),
-  snapVideoUrl: z.string().pipe(z.url()),
-  fullVideoUrl: z.string().pipe(z.url()),
-  snapThumbnailUrl: z.string().pipe(z.url()),  // NEW
-  fullThumbnailUrl: z.string().pipe(z.url()),  // NEW
-  waLink: z.string().pipe(z.url()),
+  snapVideoUrl: z.string().url(),
+  fullVideoUrl: z.string().url(),
+  snapThumbnailUrl: z.string().url(),
+  fullThumbnailUrl: z.string().url(),
+  waLink: z.string().url(),
+  waButtonLabel: z.string().min(1).default('Chat on WhatsApp'),
   caption: z.string().optional(),
+
+  /* NEW – optional / nullable */
+  popupTriggerType:  z.enum(['seconds', 'percent']).nullable().default(null),
+  popupTriggerValue: z.number().nullable().default(null),
 });
