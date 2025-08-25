@@ -1,9 +1,32 @@
+// src/modules/campaign/campaign.controller.ts  (COMPLETE, updated)
 import { Request, Response } from 'express';
 import multer from 'multer';
 import { campaignCreateSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
 import { uploadVideo } from '../../services/cloudinary';
 import { CampaignModel } from './campaign.model';
+
+/* ---------- small helper: retry wrapper ---------- */
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+async function uploadWithRetry(
+  buffer: Buffer,
+  publicId: string,
+  maxTries = 3,
+  baseDelay = 1000
+) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    try {
+      return await uploadVideo(buffer, publicId);
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxTries) break;
+      await sleep(baseDelay * 2 ** (attempt - 1));
+    }
+  }
+  throw lastErr;
+}
 
 /* ---------- legacy JSON create ---------- */
 export const create = async (req: Request, res: Response) => {
@@ -35,7 +58,10 @@ export const getBySlug = async (req: Request, res: Response) => {
       snapThumbnailUrl: 1,
       fullThumbnailUrl: 1,
       waLink: 1,
+      waButtonLabel: 1,
       caption: 1,
+      popupTriggerType: 1,   // NEW
+      popupTriggerValue: 1,  // NEW
       createdAt: 1,
       updatedAt: 1,
     }
@@ -49,20 +75,29 @@ export const getBySlug = async (req: Request, res: Response) => {
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadCampaign = async (req: Request, res: Response) => {
+  req.setTimeout(60_000);
+
   try {
     const files = req.files as { [field: string]: Express.Multer.File[] };
     if (!files || !files.preview?.[0] || !files.full?.[0]) {
       return res.status(400).json({ message: 'Both preview and full files required' });
     }
 
-    const { slug, caption = '', waLink } = req.body;
+    const {
+      slug,
+      caption = '',
+      waLink,
+      waButtonLabel = 'Chat on WhatsApp',
+      popupTriggerType = null,
+      popupTriggerValue = null,
+    } = req.body;
     if (!slug || !waLink) {
       return res.status(400).json({ message: 'slug and waLink are required' });
     }
 
     const [previewRes, fullRes] = await Promise.all([
-      uploadVideo(files.preview[0].buffer, `${slug}_preview`),
-      uploadVideo(files.full[0].buffer, `${slug}_full`),
+      uploadWithRetry(files.preview[0].buffer, `${slug}_preview`),
+      uploadWithRetry(files.full[0].buffer, `${slug}_full`),
     ]);
 
     const campaign = await createCampaign({
@@ -72,7 +107,10 @@ export const uploadCampaign = async (req: Request, res: Response) => {
       snapThumbnailUrl: previewRes.thumbnail_url,
       fullThumbnailUrl: fullRes.thumbnail_url,
       waLink,
+      waButtonLabel,
       caption,
+      popupTriggerType,
+      popupTriggerValue,
     });
 
     res.status(201).json(campaign);
@@ -81,11 +119,11 @@ export const uploadCampaign = async (req: Request, res: Response) => {
   }
 };
 
-/* ---------- NEW public endpoint ---------- */
+/* ---------- public links ---------- */
 export const listPublicLinks = async (_req: Request, res: Response) => {
   try {
     const campaigns = await CampaignModel.find()
-      .select('slug fullVideoUrl fullThumbnailUrl waLink')
+      .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue')
       .sort({ createdAt: -1 });
 
     const links = campaigns.map(c => ({
@@ -93,6 +131,9 @@ export const listPublicLinks = async (_req: Request, res: Response) => {
       fullVideoUrl: c.fullVideoUrl,
       fullThumbnailUrl: c.fullThumbnailUrl,
       waLink: c.waLink,
+      waButtonLabel: c.waButtonLabel,
+      popupTriggerType:  c.popupTriggerType,
+      popupTriggerValue: c.popupTriggerValue,
     }));
     res.json(links);
   } catch (err: any) {

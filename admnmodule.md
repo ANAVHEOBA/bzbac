@@ -15,14 +15,10 @@ curl -X POST http://localhost:5000/admin/login \000/admin/login \
 
 
 
-curl -X POST http://localhost:5000/campaigns/upload \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTkwMjM0ZGY2Y2YzMDQzNGNmNjU4MCIsImVtYWlsIjoiYmV6YWxlZWxkZW5uaXNAZ21haWwuY29tIiwiaWF0IjoxNzU1OTA2NjI2LCJleHAiOjE3NTY1MTE0MjZ9.EXTVrh8lhJUMa4Nchv8CtWEZ-b8rF5f8E5J0vQm9tO0" \
-  -F "slug=test-campaign-12" \
-  -F "waLink=https://wa.me/1234567890 " \
-  -F "caption=Test campaign created via curl" \
-  -F "preview=@preview.mp4" \
-  -F "full=@full.mp4"
-{"slug":"test-campaign-12","snapVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755949316/campaigns/test-campaign-12_preview.mp4","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755949316/campaigns/test-campaign-12_full.mp4","snapThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755949316/campaigns/test-campaign-12_preview.jpg","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755949316/campaigns/test-campaign-12_full.jpg","waLink":"https://wa.me/1234567890","caption":"Test campaign created via curl","_id":"68a9a9047ab3fc7b3a764b16","createdAt":"2025-08-23T11:41:56.899Z","updatedAt":"2025-08-23T11:41:56.899Z","__v":0}a@a:~/bzbac$ 
+dd t wor then : a@a:~/bzbac$ curl -X POST http://localhost:5000/campaigns/upload   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTkwMjM0ZGY2Y2YzMDQzNGNmNjU4MCIsImVtYWlsIjoiYmV6YWxlZWxkZW5uaXNAZ21haWwuY29tIiwiaWF0IjoxNzU2MTQzNDA0LCJleHAiOjE3NTY3NDgyMDR9.EziZ9Sr9di_zxj1_VJukK1LeawVtIcJxv7CVOPqZWeE"   -F "slug=test-campaign-15"   -F "waLink=https://wa.me/1234567890 "   -F "waButtonLabel=Order on WhatsApp"   -F "caption=Testing popup"   -F "popupTriggerType=seconds"   -F "popupTriggerValue=8"   -F "preview=@preview.mp4"   -F "full=@full.mp4"
+{"slug":"test-campaign-15","snapVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_preview.mp4 ","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_full.mp4 ","snapThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_preview.jpg ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_full.jpg ","waLink":"https://wa.me/1234567890 ","waButtonLabel":"Order on WhatsApp","caption":"Testing popup","popupTriggerType":"seconds","popupTriggerValue":8,"_id":"68aca58a2d4c475fc9b4b11b","createdAt":"2025-08-25T18:03:54.354Z","updatedAt":"2025-08-25T18:03:54.354Z","__v":0}a@a:~/bzbac$ 
+
+
 
 
 
@@ -40,5 +36,37 @@ curl -X GET http://localhost:5000/campaigns/test-campaign-1
 
 
 
-a@a:~/bzbac$ curl http://localhost:5000/campaigns/public/links
-[{"slug":"test-campaign-12","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755949316/campaigns/test-campaign-12_full.mp4","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755949316/campaigns/test-campaign-12_full.jpg","waLink":"https://wa.me/1234567890"},{"slug":"what do u mean bro","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.webm","waLink":"https://wa.me/1234567890"},{"slug":"what do u mean","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755940270/campaigns/what%20do%20u%20mean%20_full.webm","waLink":"https://wa.me/1234567890"},{"slug":"test-campaign-1","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755911668/campaigns/test-campaign-1_full.mp4","waLink":"https://wa.me/1234567890"}]a@a:~/bzbac$ 
+ths : curl http://localhost:5000/campaigns/public/links
+[{"slug":"test-campaign-15","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_full.mp4 ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_full.jpg ","waLink":"https://wa.me/1234567890 ","waButtonLabel":"Order on WhatsApp","popupTriggerType":"seconds","popupTriggerValue":8},{"slug":"What","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756142112/campaigns/What%20_full.mp4 ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756142112/campaigns/What%20_full.jpg ","waLink":"WhatsApp","waButtonLabel":"Chat on WhatsApp","popupTriggerType":null,"popupTriggerValue":null},{"slug":"Camping","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756032871/campaigns/Camping%20_full.mp4 ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756032871/campaigns/Camping%20_full.jpg ","waLink":"WhatsApp ","waButtonLabel":"Chat on WhatsApp","popupTriggerType":null,"popupTriggerValue":null},{"slug":"what do u mean bro","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.webm ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.jpg ","waLink":"https://wa.me/1234567890 ","waButtonLabel":"Chat on WhatsApp","popupTriggerType":null,"popupTriggerValue":null}]a@a:~/bzbac$ 
+
+
+
+
+
+
+
+
+
+
+
+
+[
+  {
+    "slug": "U there bro",
+    "fullVideoUrl": "https://res.cloudinary.com/defo7ecih/video/upload/v1756033008/campaigns/U%20there%20bro_full.mp4  ",
+    "fullThumbnailUrl": "https://res.cloudinary.com/defo7ecih/video/upload/v1756033008/campaigns/U%20there%20bro_full.jpg  ",
+    "waLink": "WhatsApp"
+  },
+  {
+    "slug": "Camping",
+    "fullVideoUrl": "https://res.cloudinary.com/defo7ecih/video/upload/v1756032871/campaigns/Camping%20_full.mp4  ",
+    "fullThumbnailUrl": "https://res.cloudinary.com/defo7ecih/video/upload/v1756032871/campaigns/Camping%20_full.jpg  ",
+    "waLink": "WhatsApp "
+  },
+  {
+    "slug": "what do u mean bro",
+    "fullVideoUrl": "https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.webm  ",
+    "fullThumbnailUrl": "https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.jpg  ",
+    "waLink": "https://wa.me/1234567890  "
+  }
+]
