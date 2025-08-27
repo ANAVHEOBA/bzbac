@@ -7,7 +7,8 @@ import {
   getBySlug,
   uploadCampaign,
   listPublicLinks,
-  remove
+  remove,
+  getMetaTags        // <-- NEW
 } from './campaign.controller';
 import { campaignCreateSchema } from './campaign.schema';
 import { validateInput } from '../../middleware/input-validator';
@@ -25,7 +26,7 @@ campaignRouter
   )
   .get(adminAuth, list);
 
-/* single-shot upload (+campaign) */
+/* single-shot upload */
 campaignRouter
   .route('/upload')
   .post(
@@ -40,9 +41,10 @@ campaignRouter
 /* public landing page */
 campaignRouter.get('/:slug', getBySlug);
 
+/* public meta tags page (for link unfurl) */
+campaignRouter.get('/:slug/meta', getMetaTags);   // <-- NEW
 
 campaignRouter.get('/public/links', listPublicLinks);
-
 
 campaignRouter.delete('/:slug', adminAuth, remove);
 
