@@ -142,12 +142,72 @@ export const listPublicLinks = async (_req: Request, res: Response) => {
 };
 
 /* ---------- DELETE endpoint ---------- */
+
 export const remove = async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
     const deleted = await CampaignModel.findOneAndDelete({ slug });
     if (!deleted) return res.status(404).json({ message: 'Campaign not found' });
     res.json({ message: 'Campaign deleted', slug });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ---------- NEW: meta tags for link unfurl ---------- */
+export const getMetaTags = async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+
+    const campaign = await CampaignModel.findOne(
+      { slug },
+      {
+        _id: 0,
+        slug: 1,
+        caption: 1,
+        fullThumbnailUrl: 1,
+      }
+    );
+
+    if (!campaign) {
+      return res.status(404).send('Campaign not found');
+    }
+
+    const title = campaign.slug;
+    const description = campaign.caption || `${campaign.slug} video`;
+    const image = campaign.fullThumbnailUrl;
+    const url = `https://bzfront.vercel.app/campaigns/${encodeURIComponent(slug)}`;
+
+    const html = `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+
+    <!-- Open-Graph -->
+    <meta property="og:type"        content="video.other" />
+    <meta property="og:title"       content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:image"       content="${image}" />
+    <meta property="og:url"         content="${url}" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="${title}" />
+    <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image"       content="${image}" />
+
+    <!-- Redirect humans -->
+    <meta http-equiv="refresh" content="0;url=${url}" />
+  </head>
+  <body></body>
+</html>`.trim();
+
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
