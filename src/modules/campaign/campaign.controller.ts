@@ -163,26 +163,20 @@ export const uploadCampaign = async (req: Request, res: Response) => {
 
 /* ---------- public links ---------- */
 export const listPublicLinks = async (_req: Request, res: Response) => {
-  const cacheKey = 'campaigns:public-links';
+  const campaigns = await CampaignModel.find()
+    .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue')
+    .sort({ createdAt: -1 })
+    .lean();
 
-  let links = await cache.get(cacheKey);
-  if (!links) {
-    const campaigns = await CampaignModel.find()
-      .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    links = campaigns.map(c => ({
-      slug: c.slug,
-      fullVideoUrl: c.fullVideoUrl,
-      fullThumbnailUrl: c.fullThumbnailUrl,
-      waLink: c.waLink,
-      waButtonLabel: c.waButtonLabel,
-      popupTriggerType: c.popupTriggerType,
-      popupTriggerValue: c.popupTriggerValue,
-    }));
-    await cache.set(cacheKey, links);
-  }
+  const links = campaigns.map(c => ({
+    slug: c.slug,
+    fullVideoUrl: c.fullVideoUrl,
+    fullThumbnailUrl: c.fullThumbnailUrl,
+    waLink: c.waLink,
+    waButtonLabel: c.waButtonLabel,
+    popupTriggerType: c.popupTriggerType,
+    popupTriggerValue: c.popupTriggerValue,
+  }));
 
   res.json(links);
 };
