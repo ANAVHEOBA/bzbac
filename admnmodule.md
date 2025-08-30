@@ -5,12 +5,10 @@ a@a:~/bzbac$ curl -X POST http://localhost:5000/admin/register \
 
 
 
-curl -X POST http://localhost:5000/admin/login \000/admin/login \
+curl -X POST http://localhost:5000/admin/login \
   -H "Content-Type: application/json" \
   -d '{"email":"bezaleeldennis@gmail.com","password":"bzassetar"}'
-{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTkwMjM0ZGY2Y2YzMDQzNGNmNjU4MCIsImVtYWlsIjoiYmV6YWxlZWxkZW5uaXNAZ21haWwuY29tIiwiaWF0IjoxNzU1OTA2NjI2LCJleHAiOjE3NTY1MTE0MjZ9.EXTVrh8lhJUMa4Nchv8CtWEZ-b8rF5f8E5J0vQm9tO0"}a@a:~/bzbac$ 
-
-
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTkwMjM0ZGY2Y2YzMDQzNGNmNjU4MCIsImVtYWlsIjoiYmV6YWxlZWxkZW5uaXNAZ21haWwuY29tIiwiaWF0IjoxNzU2NTU5MTkzLCJleHAiOjE3NTcxNjM5OTN9.MVapQfK6aMAm8pJKojMhjTLxNGTAQZ7k9gT7fhkyPaQ"}
 
 
 

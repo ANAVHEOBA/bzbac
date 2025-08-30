@@ -82,11 +82,15 @@ export const getBySlug = async (req: Request, res: Response) => {
 /* ---------- single-shot upload ---------- */
 const upload = multer({ storage: multer.memoryStorage() });
 
+// src/modules/campaign/campaign.controller.ts
 export const uploadCampaign = async (req: Request, res: Response) => {
   req.setTimeout(60_000);
 
   try {
+    /* ---------- basic validation ---------- */
     const files = req.files as { [field: string]: Express.Multer.File[] };
+    console.log('📁 files received:', Object.keys(files || {}));
+
     if (!files || !files.preview?.[0] || !files.full?.[0]) {
       return res.status(400).json({ message: 'Both preview and full files required' });
     }
@@ -99,32 +103,61 @@ export const uploadCampaign = async (req: Request, res: Response) => {
       popupTriggerType = null,
       popupTriggerValue = null,
     } = req.body;
+    console.log('🆔 slug:', slug, 'waLink:', waLink);
+
     if (!slug || !waLink) {
       return res.status(400).json({ message: 'slug and waLink are required' });
     }
 
-    const [previewRes, fullRes] = await Promise.all([
-      uploadWithRetry(files.preview[0].buffer, `${slug}_preview`),
-      uploadWithRetry(files.full[0].buffer, `${slug}_full`),
-    ]);
+    /* ---------- upload to Cloudinary ---------- */
+    console.log('🚀 starting Cloudinary uploads…');
+    let previewRes, fullRes;
+    try {
+      [previewRes, fullRes] = await Promise.all([
+        uploadWithRetry(files.preview[0].buffer, `${slug}_preview`),
+        uploadWithRetry(files.full[0].buffer, `${slug}_full`),
+      ]);
+      console.log('✅ Cloudinary done:', { previewRes, fullRes });
+    } catch (cloudErr: any) {
+      console.error('☁️ Cloudinary error:', cloudErr.message || cloudErr);
+      return res.status(502).json({ message: 'Cloudinary upload failed', detail: cloudErr.message });
+    }
 
-    const campaign = await createCampaign({
-      slug,
-      snapVideoUrl: previewRes.secure_url,
-      fullVideoUrl: fullRes.secure_url,
-      snapThumbnailUrl: previewRes.thumbnail_url,
-      fullThumbnailUrl: fullRes.thumbnail_url,
-      waLink,
-      waButtonLabel,
-      caption,
-      popupTriggerType,
-      popupTriggerValue,
-    });
+    /* ---------- create DB doc ---------- */
+    console.log('📝 creating campaign doc…');
+    let campaign;
+    try {
+      campaign = await createCampaign({
+        slug,
+        snapVideoUrl: previewRes.secure_url,
+        fullVideoUrl: fullRes.secure_url,
+        snapThumbnailUrl: previewRes.thumbnail_url,
+        fullThumbnailUrl: fullRes.thumbnail_url,
+        waLink,
+        waButtonLabel,
+        caption,
+        popupTriggerType,
+        popupTriggerValue,
+      });
+      console.log('✅ campaign saved:', campaign._id);
+    } catch (dbErr: any) {
+      console.error('🗄️ DB error:', dbErr.message || dbErr);
+      return res.status(409).json({ message: 'DB save failed', detail: dbErr.message });
+    }
 
-    await cache.invalidate('campaign:*');          // <-- NEW
-    res.status(201).json(campaign);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message || 'Upload failed' });
+    /* ---------- cache invalidation ---------- */
+    try {
+      await cache.invalidate('campaign:*');
+      console.log('💨 cache invalidated');
+    } catch (cacheErr: any) {
+      console.warn('⚠️ cache invalidate failed:', cacheErr.message);
+    }
+
+    /* ---------- success ---------- */
+    return res.status(201).json(campaign);
+  } catch (fatal: any) {
+    console.error('💥 top-level catch:', fatal);
+    res.status(500).json({ message: fatal.message || 'Upload failed' });
   }
 };
 
