@@ -1,10 +1,11 @@
-// src/modules/campaign/campaign.controller.ts  (COMPLETE, updated)
+// src/modules/campaign/campaign.controller.ts
 import { Request, Response } from 'express';
 import multer from 'multer';
 import { campaignCreateSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
 import { uploadVideo } from '../../services/cloudinary';
 import { CampaignModel } from './campaign.model';
+import { cache } from '../../utils/cache';        // <-- NEW
 
 /* ---------- small helper: retry wrapper ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -33,6 +34,7 @@ export const create = async (req: Request, res: Response) => {
   try {
     const payload = campaignCreateSchema.parse(req.body);
     const campaign = await createCampaign(payload);
+    await cache.invalidate('campaign:*');          // <-- NEW
     res.status(201).json(campaign);
   } catch (err: any) {
     res.status(400).json({ message: err.errors?.[0]?.message || err.message });
@@ -47,27 +49,33 @@ export const list = async (_req: Request, res: Response) => {
 
 export const getBySlug = async (req: Request, res: Response) => {
   const { slug } = req.params;
+  const cacheKey = `campaign:${slug}`;
 
-  const campaign = await CampaignModel.findOne(
-    { slug },
-    {
-      _id: 0,
-      slug: 1,
-      snapVideoUrl: 1,
-      fullVideoUrl: 1,
-      snapThumbnailUrl: 1,
-      fullThumbnailUrl: 1,
-      waLink: 1,
-      waButtonLabel: 1,
-      caption: 1,
-      popupTriggerType: 1,   // NEW
-      popupTriggerValue: 1,  // NEW
-      createdAt: 1,
-      updatedAt: 1,
-    }
-  );
+  let campaign = await cache.get(cacheKey);
+  if (!campaign) {
+    campaign = await CampaignModel.findOne(
+      { slug },
+      {
+        _id: 0,
+        slug: 1,
+        snapVideoUrl: 1,
+        fullVideoUrl: 1,
+        snapThumbnailUrl: 1,
+        fullThumbnailUrl: 1,
+        waLink: 1,
+        waButtonLabel: 1,
+        caption: 1,
+        popupTriggerType: 1,
+        popupTriggerValue: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    ).lean();
 
-  if (!campaign) return res.status(404).json({ message: 'Not found' });
+    if (!campaign) return res.status(404).json({ message: 'Not found' });
+    await cache.set(cacheKey, campaign);
+  }
+
   res.json(campaign);
 };
 
@@ -113,6 +121,7 @@ export const uploadCampaign = async (req: Request, res: Response) => {
       popupTriggerValue,
     });
 
+    await cache.invalidate('campaign:*');          // <-- NEW
     res.status(201).json(campaign);
   } catch (err: any) {
     res.status(500).json({ message: err.message || 'Upload failed' });
@@ -121,33 +130,37 @@ export const uploadCampaign = async (req: Request, res: Response) => {
 
 /* ---------- public links ---------- */
 export const listPublicLinks = async (_req: Request, res: Response) => {
-  try {
+  const cacheKey = 'campaigns:public-links';
+
+  let links = await cache.get(cacheKey);
+  if (!links) {
     const campaigns = await CampaignModel.find()
       .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const links = campaigns.map(c => ({
+    links = campaigns.map(c => ({
       slug: c.slug,
       fullVideoUrl: c.fullVideoUrl,
       fullThumbnailUrl: c.fullThumbnailUrl,
       waLink: c.waLink,
       waButtonLabel: c.waButtonLabel,
-      popupTriggerType:  c.popupTriggerType,
+      popupTriggerType: c.popupTriggerType,
       popupTriggerValue: c.popupTriggerValue,
     }));
-    res.json(links);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
+    await cache.set(cacheKey, links);
   }
+
+  res.json(links);
 };
 
 /* ---------- DELETE endpoint ---------- */
-
 export const remove = async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
     const deleted = await CampaignModel.findOneAndDelete({ slug });
     if (!deleted) return res.status(404).json({ message: 'Campaign not found' });
+    await cache.invalidate('campaign:*');          // <-- NEW
     res.json({ message: 'Campaign deleted', slug });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
