@@ -15,3 +15,5 @@ export const campaignCreateSchema = z.object({
   popupTriggerType:  z.enum(['seconds', 'percent']).nullable().default(null),
   popupTriggerValue: z.number().nullable().default(null),
 });
+
+export const campaignPatchSchema = campaignCreateSchema.partial();

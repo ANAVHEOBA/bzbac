@@ -8,7 +8,8 @@ import {
   uploadCampaign,
   listPublicLinks,
   remove,
-  getMetaTags        // <-- NEW
+  getMetaTags,
+  update      
 } from './campaign.controller';
 import { campaignCreateSchema } from './campaign.schema';
 import { validateInput } from '../../middleware/input-validator';
@@ -36,6 +37,17 @@ campaignRouter
       { name: 'full', maxCount: 1 },
     ]),
     uploadCampaign
+  );
+
+  campaignRouter
+  .route('/:slug')
+  .put(
+    adminAuth,
+    upload.fields([
+      { name: 'preview', maxCount: 1 },
+      { name: 'full', maxCount: 1 },
+    ]),
+    update
   );
 
 /* public landing page */
