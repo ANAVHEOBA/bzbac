@@ -1,7 +1,7 @@
 // src/modules/campaign/campaign.controller.ts
 import { Request, Response } from 'express';
 import multer from 'multer';
-import { campaignCreateSchema } from './campaign.schema';
+import { campaignCreateSchema, campaignPatchSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
 import { uploadVideo } from '../../services/cloudinary';
 import { CampaignModel } from './campaign.model';
@@ -252,3 +252,77 @@ export const getMetaTags = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+
+
+
+export const update = async (req: Request, res: Response) => {
+  try {
+    /* ---------- 0. sanitize slug ---------- */
+    const rawSlug = req.params.slug?.toString().trim();
+    if (!rawSlug) {
+      return res.status(400).json({ message: 'slug param is missing or empty' });
+    }
+
+    /* ---------- 1. detect file presence ---------- */
+    const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
+    const hasFiles = !!(files?.preview?.[0] || files?.full?.[0]);
+
+    /* ---------- 2. build payload ---------- */
+    let payload: any;
+
+    if (hasFiles) {
+      if (!files!.preview?.[0] || !files!.full?.[0]) {
+        return res.status(400).json({ message: 'Both preview & full files required' });
+      }
+
+      try {
+        const [previewRes, fullRes] = await Promise.all([
+          uploadWithRetry(files!.preview[0].buffer, `${rawSlug}_preview`),
+          uploadWithRetry(files!.full[0].buffer, `${rawSlug}_full`),
+        ]);
+
+        payload = {
+          ...req.body,
+          snapVideoUrl: previewRes.secure_url,
+          fullVideoUrl: fullRes.secure_url,
+          snapThumbnailUrl: previewRes.thumbnail_url,
+          fullThumbnailUrl: fullRes.thumbnail_url,
+        };
+      } catch (cloudErr: any) {
+        console.error('☁️ Cloudinary upload error:', cloudErr);
+        return res.status(502).json({ message: 'Cloudinary upload failed', detail: cloudErr.message });
+      }
+    } else {
+      /* JSON-only mode */
+      payload = campaignPatchSchema.parse(req.body);
+    }
+
+    /* ---------- 3. lookup & update ---------- */
+    console.log('🔍 Updating campaign with slug:', JSON.stringify(rawSlug));
+    const updated = await CampaignModel.findOneAndUpdate(
+      { slug: rawSlug },        // exact, trimmed match
+      payload,
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      console.warn('⚠️ No campaign matched slug:', rawSlug);
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
+
+    /* ---------- 4. invalidate cache ---------- */
+    try {
+      await cache.invalidate('campaign:*');
+    } catch (cacheErr) {
+      console.warn('⚠️ Cache invalidation failed:', cacheErr);
+    }
+
+    /* ---------- 5. respond ---------- */
+    res.json(updated);
+  } catch (err: any) {
+    console.error('💥 UPDATE endpoint error:', err);
+    res.status(400).json({ message: err.errors?.[0]?.message || err.message });
+  }
+};
+
