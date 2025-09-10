@@ -27,3 +27,6 @@ media/
 .idea/
 *.swp
 *.swo
+# Google Cloud keys
+*.json
+gdrive-key.json
