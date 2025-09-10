@@ -8,7 +8,7 @@ a@a:~/bzbac$ curl -X POST http://localhost:5000/admin/register \
 curl -X POST http://localhost:5000/admin/login \
   -H "Content-Type: application/json" \
   -d '{"email":"bezaleeldennis@gmail.com","password":"bzassetar"}'
-{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTkwMjM0ZGY2Y2YzMDQzNGNmNjU4MCIsImVtYWlsIjoiYmV6YWxlZWxkZW5uaXNAZ21haWwuY29tIiwiaWF0IjoxNzU2NTU5MTkzLCJleHAiOjE3NTcxNjM5OTN9.MVapQfK6aMAm8pJKojMhjTLxNGTAQZ7k9gT7fhkyPaQ"}
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTkwMjM0ZGY2Y2YzMDQzNGNmNjU4MCIsImVtYWlsIjoiYmV6YWxlZWxkZW5uaXNAZ21haWwuY29tIiwiaWF0IjoxNzU3NTEyMDgzLCJleHAiOjE3NTgxMTY4ODN9.PoRAAb1C8eMSMoygMco-k1cEU80fQiymm8JB1fy900w"}
 
 
 
