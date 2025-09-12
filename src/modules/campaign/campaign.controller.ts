@@ -3,9 +3,10 @@ import multer from 'multer';
 import { campaignCreateSchema, campaignPatchSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
 import { uploadVideo } from '../../services/cloudinary';
-import { uploadToFilestack } from '../../services/filestack'; // <-- NEW
+import { uploadToFilestack } from '../../services/filestack';
 import { CampaignModel } from './campaign.model';
 import { cache } from '../../utils/cache';
+import axios from 'axios';
 
 /* ---------- small helper: retry wrapper ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -24,16 +25,56 @@ async function cloudinaryWithRetry(buffer: Buffer, publicId: string) {
   throw lastErr;
 }
 
-/* ---------- size-based uploader (used in both create & update) ---------- */
+/* ---------- NEW: Generate thumbnail using Cloudinary for Filestack videos ---------- */
+async function generateThumbnailForFilestack(videoUrl: string, publicId: string) {
+  try {
+    console.log('🖼️ Generating thumbnail for Filestack video...');
+    
+    // Download first few MB of the video to create thumbnail
+    const response = await axios.get(videoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      headers: { 'Range': 'bytes=0-10485760' } // Download first 10MB
+    });
+    
+    const buffer = Buffer.from(response.data);
+    
+    // Use Cloudinary to generate thumbnail from the video segment
+    const { thumbnail_url } = await cloudinaryWithRetry(buffer, `${publicId}_thumb`);
+    
+    console.log('✅ Thumbnail generated:', thumbnail_url);
+    return thumbnail_url;
+  } catch (error) {
+    console.error('❌ Thumbnail generation failed:', error);
+    // Fallback: return Filestack video with video_snapshot transformation
+    return `${videoUrl}/video_snapshot/time:1/output=format:jpg/resize=width:640,height:360,fit:crop`;
+  }
+}
+
+/* ---------- UPDATED: Upload logic with proper typing ---------- */
 async function uploadSingleVideo(buffer: Buffer, publicId: string) {
   const sizeMB = buffer.length / 1024 / 1024;
+  
   if (sizeMB <= 70) {
-    console.log('🚀 using Cloudinary (≤70 MB)');
+    console.log('🚀 Using Cloudinary for both upload and thumbnail (≤70 MB)');
     return cloudinaryWithRetry(buffer, publicId);
   }
-  console.log('🚀 using Filestack (>70 MB)');
-  return uploadToFilestack(buffer, publicId);
+  
+  console.log('🚀 Using Filestack for upload, Cloudinary for thumbnail (>70 MB)');
+  
+  // Upload to Filestack
+  const filestackResult = await uploadToFilestack(buffer, publicId);
+  
+  // Generate thumbnail using Cloudinary
+  const thumbnailUrl = await generateThumbnailForFilestack(filestackResult.secure_url, publicId);
+  
+  return {
+    secure_url: filestackResult.secure_url,
+    thumbnail_url: thumbnailUrl
+  };
 }
+
+/* ---------- Rest of your existing code remains the same ---------- */
 
 /* ---------- JSON-only create ---------- */
 export const create = async (req: Request, res: Response) => {
@@ -193,7 +234,7 @@ export const getMetaTags = async (req: Request, res: Response) => {
     const title = campaign.slug;
     const description = campaign.caption || `${campaign.slug} video`;
     const image = campaign.fullThumbnailUrl;
-    const url = `https://bzfront.vercel.app/campaigns/${encodeURIComponent(slug)}`;
+    const url = `https://bzfront.vercel.app/campaigns/  ${encodeURIComponent(slug)}`;
 
     const html = `
 <!doctype html>
