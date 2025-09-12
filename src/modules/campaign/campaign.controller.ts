@@ -86,8 +86,9 @@ export const getBySlug = async (req: Request, res: Response) => {
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadCampaign = async (req: Request, res: Response) => {
-  req.setTimeout(120_000); // Filestack may be slower
-
+  // Increase timeout for very large files (10 minutes)
+  req.setTimeout(600_000);
+  
   try {
     const files = req.files as { [field: string]: Express.Multer.File[] };
     console.log('📁 files received:', Object.keys(files || {}));
@@ -110,7 +111,18 @@ export const uploadCampaign = async (req: Request, res: Response) => {
     }
 
     const file = files.full[0];
+    const sizeMB = file.buffer.length / 1024 / 1024;
+    
+    console.log(`📊 Processing ${sizeMB.toFixed(2)} MB file...`);
+    
+    // Add progress logging
+    const startTime = Date.now();
     const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${slug}_full`);
+    const uploadTime = Date.now() - startTime;
+    
+    console.log(`✅ Upload completed in ${uploadTime}ms`);
+    console.log(`📺 Video URL: ${secure_url}`);
+    console.log(`🖼️ Thumbnail URL: ${thumbnail_url}`);
 
     const campaign = await createCampaign({
       slug,
@@ -126,8 +138,12 @@ export const uploadCampaign = async (req: Request, res: Response) => {
     await cache.invalidate('campaign:*');
     res.status(201).json(campaign);
   } catch (err: any) {
-    console.error('💥 uploadCampaign:', err);
-    res.status(502).json({ message: err.message || 'Upload failed' });
+    console.error('💥 uploadCampaign error:', err);
+    console.error('Error stack:', err.stack);
+    res.status(502).json({ 
+      message: err.message || 'Upload failed',
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 };
 
