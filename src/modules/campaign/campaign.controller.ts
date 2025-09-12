@@ -8,95 +8,47 @@ import { CampaignModel } from './campaign.model';
 import { cache } from '../../utils/cache';
 import axios from 'axios';
 
-/* ---------- Configuration ---------- */
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks for large files
-const UPLOAD_TIMEOUT = 900_000; // 15 minutes
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY = 1000; // Base delay in ms
-
 /* ---------- Enhanced retry wrapper with exponential backoff ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-async function withRetry<T>(
-  fn: () => Promise<T>, 
-  attempts: number = RETRY_ATTEMPTS,
-  delay: number = RETRY_DELAY
-): Promise<T> {
-  let lastError;
-  
-  for (let attempt = 1; attempt <= attempts; attempt++) {
+async function cloudinaryWithRetry(buffer: Buffer, publicId: string, maxRetries = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await fn();
+      return await uploadVideo(buffer, publicId);
     } catch (err) {
-      lastError = err;
-      console.warn(`Attempt ${attempt} failed:`, err);
-      
-      if (attempt === attempts) break;
-      
-      const waitTime = delay * Math.pow(2, attempt - 1); // Exponential backoff
-      console.log(`Retrying in ${waitTime}ms...`);
-      await sleep(waitTime);
+      lastErr = err;
+      console.error(`Cloudinary attempt ${attempt} failed:`, err);
+      if (attempt === maxRetries) break;
+      await sleep(1000 * Math.pow(2, attempt - 1)); // Exponential backoff
     }
   }
-  
-  throw lastError;
+  throw lastErr;
 }
 
-/* ---------- Optimized Cloudinary upload ---------- */
-async function cloudinaryWithRetry(buffer: Buffer, publicId: string) {
-  return withRetry(() => uploadVideo(buffer, publicId));
-}
-
-/* ---------- Enhanced thumbnail generation with better fallbacks ---------- */
+/* ---------- Optimized thumbnail generation ---------- */
 async function generateThumbnailForFilestack(videoUrl: string, publicId: string) {
   try {
     console.log('🖼️ Generating thumbnail for Filestack video...');
     
-    // Try multiple approaches for thumbnail generation
-    const approaches = [
-      // Approach 1: Download video segment and use Cloudinary
-      async () => {
-        const response = await axios.get(videoUrl, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-          headers: { 'Range': 'bytes=0-5242880' } // First 5MB only
-        });
-        
-        const buffer = Buffer.from(response.data);
-        const { thumbnail_url } = await cloudinaryWithRetry(buffer, `${publicId}_thumb`);
-        return thumbnail_url;
-      },
-      
-      // Approach 2: Use Cloudinary's remote upload
-      async () => {
-        console.log('Trying Cloudinary remote upload...');
-        const { secure_url } = await cloudinaryWithRetry(
-          Buffer.from(''), // Empty buffer, we'll use the URL
-          `${publicId}_remote`
-        );
-        return secure_url.replace(/\.[^.]+$/, '.jpg');
-      }
-    ];
-
-    for (const approach of approaches) {
-      try {
-        const thumbnail = await approach();
-        console.log('✅ Thumbnail generated:', thumbnail);
-        return thumbnail;
-      } catch (err) {
-        console.warn('Thumbnail approach failed:', err);
-        continue;
-      }
-    }
+    // Download smaller chunk (5MB instead of 10MB) for faster processing
+    const response = await axios.get(videoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 20000, // Reduced timeout
+      headers: { 'Range': 'bytes=0-5242880' } // 5MB chunk
+    });
     
-    // Final fallback: Filestack transformation
-    console.log('Using Filestack fallback thumbnail...');
-    return `${videoUrl}/video_snapshot/time:1/output=format:jpg/resize=width:640,height:360,fit:crop`;
+    const buffer = Buffer.from(response.data);
     
+    // Use Cloudinary to generate thumbnail from the video segment
+    const { thumbnail_url } = await cloudinaryWithRetry(buffer, `${publicId}_thumb`);
+    
+    console.log('✅ Thumbnail generated:', thumbnail_url);
+    return thumbnail_url;
   } catch (error) {
-    console.error('❌ All thumbnail generation failed:', error);
-    throw new Error('Failed to generate thumbnail');
+    console.error('❌ Thumbnail generation failed:', error);
+    // Enhanced fallback with better quality
+    return `${videoUrl}/video_snapshot/time:2/output=format:jpg/quality=80/resize=width:640,height:360,fit:crop`;
   }
 }
 
@@ -104,22 +56,15 @@ async function generateThumbnailForFilestack(videoUrl: string, publicId: string)
 async function uploadSingleVideo(buffer: Buffer, publicId: string) {
   const sizeMB = buffer.length / 1024 / 1024;
   
-  // Validate file size
-  if (sizeMB > 500) {
-    throw new Error('File too large. Maximum size is 500MB');
-  }
-  
-  console.log(`📊 Processing ${sizeMB.toFixed(2)} MB file...`);
-  
   if (sizeMB <= 70) {
-    console.log('🚀 Using Cloudinary for both upload and thumbnail (≤70 MB)');
+    console.log(`🚀 Using Cloudinary for both upload and thumbnail (${sizeMB.toFixed(1)} MB)`);
     return cloudinaryWithRetry(buffer, publicId);
   }
   
-  console.log('🚀 Using Filestack for upload, Cloudinary for thumbnail (>70 MB)');
+  console.log(`🚀 Using Filestack for upload, Cloudinary for thumbnail (${sizeMB.toFixed(1)} MB)`);
   
-  // For large files, upload to Filestack first
-  const filestackResult = await withRetry(() => uploadToFilestack(buffer, publicId));
+  // Upload to Filestack
+  const filestackResult = await uploadToFilestack(buffer, publicId);
   
   // Generate thumbnail using Cloudinary
   const thumbnailUrl = await generateThumbnailForFilestack(filestackResult.secure_url, publicId);
@@ -131,49 +76,117 @@ async function uploadSingleVideo(buffer: Buffer, publicId: string) {
 }
 
 /* ---------- Enhanced error handling and validation ---------- */
-const validateUpload = (files: any, body: any) => {
-  if (!files?.full?.[0]) {
-    throw new Error('Video file is required');
+const validateUploadRequest = (req: Request) => {
+  const { slug, waLink } = req.body;
+  
+  if (!slug || !waLink) {
+    throw new Error('slug and waLink are required');
   }
   
-  const { slug, waLink } = body;
-  if (!slug?.trim()) throw new Error('Slug is required');
-  if (!waLink?.trim()) throw new Error('WhatsApp link is required');
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    throw new Error('slug must contain only lowercase letters, numbers, and hyphens');
+  }
   
-  const file = files.full[0];
-  if (file.buffer.length > MAX_FILE_SIZE) {
-    throw new Error('File too large. Maximum size is 500MB');
+  if (!/^https?:\/\/.+/.test(waLink)) {
+    throw new Error('waLink must be a valid URL');
   }
   
   return true;
 };
 
-/* ---------- Optimized upload endpoint ---------- */
+/* ---------- Core CRUD operations ---------- */
+export const create = async (req: Request, res: Response) => {
+  try {
+    const payload = campaignCreateSchema.parse(req.body);
+    const campaign = await createCampaign(payload);
+    await cache.invalidate('campaign:*');
+    res.status(201).json(campaign);
+  } catch (err: any) {
+    res.status(400).json({ 
+      message: err.errors?.[0]?.message || err.message,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+};
+
+export const list = async (_req: Request, res: Response) => {
+  try {
+    const campaigns = await listCampaigns();
+    res.json({
+      data: campaigns,
+      count: campaigns.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ 
+      message: 'Failed to fetch campaigns',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+export const getBySlug = async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const cacheKey = `campaign:${slug}`;
+
+  try {
+    let campaign = await cache.get(cacheKey);
+    
+    if (!campaign) {
+      campaign = await CampaignModel.findOne(
+        { slug },
+        {
+          _id: 0,
+          fullVideoUrl: 1,
+          fullThumbnailUrl: 1,
+          waLink: 1,
+          waButtonLabel: 1,
+          caption: 1,
+          popupTriggerType: 1,
+          popupTriggerValue: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        }
+      ).lean();
+
+      if (!campaign) {
+        return res.status(404).json({ message: 'Campaign not found' });
+      }
+      
+      await cache.set(cacheKey, campaign, 300); // Cache for 5 minutes
+    }
+
+    res.json(campaign);
+  } catch (err: any) {
+    res.status(500).json({ message: 'Failed to fetch campaign' });
+  }
+};
+
+/* ---------- Enhanced upload with better error handling ---------- */
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_FILE_SIZE,
-    files: 1,
-    fields: 20
+    fileSize: 500 * 1024 * 1024, // 500MB max
+    files: 2,
+    fields: 10
   }
 });
 
 export const uploadCampaign = async (req: Request, res: Response) => {
-  // Set extended timeout for large files
-  req.setTimeout(UPLOAD_TIMEOUT);
-  res.setTimeout(UPLOAD_TIMEOUT);
-  
-  // Set keep-alive headers
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Keep-Alive', `timeout=${UPLOAD_TIMEOUT / 1000}`);
+  // Extended timeout for large files
+  req.setTimeout(900_000); // 15 minutes
+  res.setTimeout(900_000);
   
   try {
-    console.log('📁 Upload request received');
-    
-    // Validate input
-    validateUpload(req.files, req.body);
+    // Validate request first
+    validateUploadRequest(req);
     
     const files = req.files as { [field: string]: Express.Multer.File[] };
+    
+    if (!files || !files.full?.[0]) {
+      return res.status(400).json({ message: 'Full video file is required' });
+    }
+
     const {
       slug,
       caption = '',
@@ -184,45 +197,70 @@ export const uploadCampaign = async (req: Request, res: Response) => {
     } = req.body;
 
     const file = files.full[0];
+    const sizeMB = file.buffer.length / 1024 / 1024;
+    
+    console.log(`📊 Processing ${sizeMB.toFixed(2)} MB file for slug: ${slug}`);
+    
+    // Validate file size
+    if (sizeMB > 500) {
+      return res.status(413).json({ 
+        message: 'File too large. Maximum size is 500MB',
+        currentSize: `${sizeMB.toFixed(2)} MB`
+      });
+    }
+    
     const startTime = Date.now();
-    
-    // Process upload with comprehensive error handling
     const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${slug}_full`);
-    
     const uploadTime = Date.now() - startTime;
+    
     console.log(`✅ Upload completed in ${uploadTime}ms`);
+    console.log(`📺 Video URL: ${secure_url}`);
+    console.log(`🖼️ Thumbnail URL: ${thumbnail_url}`);
 
-    // Create campaign record
     const campaign = await createCampaign({
-      slug: slug.trim(),
+      slug,
       fullVideoUrl: secure_url,
       fullThumbnailUrl: thumbnail_url,
-      waLink: waLink.trim(),
-      waButtonLabel: waButtonLabel.trim(),
-      caption: caption.trim(),
+      waLink,
+      waButtonLabel,
+      caption,
       popupTriggerType,
       popupTriggerValue,
     });
 
-    // Invalidate cache
     await cache.invalidate('campaign:*');
     
-    // Send success response
     res.status(201).json({
+      data: campaign,
       message: 'Campaign uploaded successfully',
-      campaign,
       uploadTime: `${uploadTime}ms`
     });
     
   } catch (err: any) {
-    console.error('💥 Upload failed:', err);
+    console.error('💥 uploadCampaign error:', err);
     
-    // Send appropriate error response
-    const statusCode = err.message.includes('required') ? 400 : 502;
+    // Better error categorization
+    let statusCode = 502;
+    let message = 'Upload failed';
+    
+    if (err.message?.includes('required')) {
+      statusCode = 400;
+      message = 'Missing required fields';
+    } else if (err.message?.includes('large')) {
+      statusCode = 413;
+      message = 'File too large';
+    } else if (err.message?.includes('Filestack')) {
+      statusCode = 503;
+      message = 'File upload service unavailable';
+    } else if (err.message?.includes('Cloudinary')) {
+      statusCode = 503;
+      message = 'Image processing service unavailable';
+    }
+    
     res.status(statusCode).json({ 
-      message: err.message || 'Upload failed',
-      timestamp: new Date().toISOString(),
-      requestId: req.headers['x-request-id'] || 'unknown'
+      message: message,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      timestamp: new Date().toISOString()
     });
   }
 };
@@ -242,18 +280,22 @@ export const listPublicLinks = async (req: Request, res: Response) => {
       .lean();
 
     const total = await CampaignModel.countDocuments();
-    
+
     res.json({
-      campaigns,
+      data: campaigns,
       pagination: {
         page,
         limit,
         total,
         pages: Math.ceil(total / limit)
-      }
+      },
+      timestamp: new Date().toISOString()
     });
   } catch (err: any) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ 
+      message: 'Failed to fetch campaigns',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
@@ -261,45 +303,46 @@ export const listPublicLinks = async (req: Request, res: Response) => {
 export const remove = async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const { permanent = false } = req.query;
+    const { soft = 'false' } = req.query;
     
-    if (permanent === 'true') {
-      // Permanent delete
-      const deleted = await CampaignModel.findOneAndDelete({ slug });
-      if (!deleted) return res.status(404).json({ message: 'Campaign not found' });
-    } else {
-      // Soft delete (mark as deleted)
-      const updated = await CampaignModel.findOneAndUpdate(
-        { slug }, 
-        { deletedAt: new Date() }, 
-        { new: true }
-      );
-      if (!updated) return res.status(404).json({ message: 'Campaign not found' });
+    const deleted = await CampaignModel.findOneAndDelete({ slug });
+    
+    if (!deleted) {
+      return res.status(404).json({ message: 'Campaign not found' });
     }
     
     await cache.invalidate('campaign:*');
-    res.json({ message: 'Campaign deleted successfully', slug });
+    
+    res.json({ 
+      message: 'Campaign deleted successfully',
+      slug: deleted.slug,
+      deletedAt: new Date().toISOString()
+    });
   } catch (err: any) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ 
+      message: 'Failed to delete campaign',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
-/* ---------- Enhanced meta tags with better SEO ---------- */
+/* ---------- Enhanced meta tags ---------- */
 export const getMetaTags = async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
     const campaign = await CampaignModel.findOne(
-      { slug, deletedAt: null },
-      { _id: 0, slug: 1, caption: 1, fullThumbnailUrl: 1, createdAt: 1 }
+      { slug },
+      { _id: 0, slug: 1, caption: 1, fullThumbnailUrl: 1 }
     );
     
-    if (!campaign) return res.status(404).send('Campaign not found');
+    if (!campaign) {
+      return res.status(404).send('Campaign not found');
+    }
 
-    const title = `${campaign.slug} - Video Campaign`;
-    const description = campaign.caption || `Watch ${campaign.slug} video campaign`;
+    const title = campaign.slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const description = campaign.caption || `Watch ${title} video`;
     const image = campaign.fullThumbnailUrl;
     const url = `https://bzfront.vercel.app/campaigns/${encodeURIComponent(slug)}`;
-    const publishedTime = campaign.createdAt.toISOString();
 
     const html = `<!doctype html>
 <html lang="en">
@@ -311,26 +354,30 @@ export const getMetaTags = async (req: Request, res: Response) => {
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
     <meta property="og:image" content="${image}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
     <meta property="og:url" content="${url}" />
-    <meta property="article:published_time" content="${publishedTime}" />
+    <meta property="og:site_name" content="BZ Campaigns" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:image" content="${image}" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${url}" />
+    <meta name="twitter:site" content="@yourhandle" />
     <meta http-equiv="refresh" content="0;url=${url}" />
+    <style>body{margin:0;font-family:sans-serif;background:#f5f5f5;display:flex;align-items:center;justify-content:center;height:100vh}#loader{border:4px solid #f3f3f3;border-top:4px solid #4361ee;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style>
   </head>
-  <body></body>
+  <body>
+    <div id="loader"></div>
+    <script>setTimeout(()=>window.location.href="${url}",1500)</script>
+  </body>
 </html>`.trim();
 
-    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   } catch (err: any) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ 
+      message: 'Failed to generate meta tags',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
@@ -338,7 +385,9 @@ export const getMetaTags = async (req: Request, res: Response) => {
 export const update = async (req: Request, res: Response) => {
   try {
     const rawSlug = req.params.slug?.toString().trim();
-    if (!rawSlug) return res.status(400).json({ message: 'Slug parameter is required' });
+    if (!rawSlug) {
+      return res.status(400).json({ message: 'slug param missing' });
+    }
 
     const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
     const hasFile = !!files?.full?.[0];
@@ -346,23 +395,41 @@ export const update = async (req: Request, res: Response) => {
 
     if (hasFile) {
       const file = files.full[0];
+      const sizeMB = file.buffer.length / 1024 / 1024;
+      
+      if (sizeMB > 500) {
+        return res.status(413).json({ 
+          message: 'Update file too large. Maximum size is 500MB',
+          currentSize: `${sizeMB.toFixed(2)} MB`
+        });
+      }
+      
       const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${rawSlug}_full`);
       payload = { ...req.body, fullVideoUrl: secure_url, fullThumbnailUrl: thumbnail_url };
     } else {
       payload = campaignPatchSchema.parse(req.body);
     }
 
-    const updated = await CampaignModel.findOneAndUpdate(
-      { slug: rawSlug, deletedAt: null }, 
-      payload, 
-      { new: true, runValidators: true }
-    );
+    const updated = await CampaignModel.findOneAndUpdate({ slug: rawSlug }, payload, {
+      new: true,
+      runValidators: true,
+    });
     
-    if (!updated) return res.status(404).json({ message: 'Campaign not found' });
+    if (!updated) {
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
 
     await cache.invalidate('campaign:*');
-    res.json({ message: 'Campaign updated successfully', campaign: updated });
+    
+    res.json({
+      data: updated,
+      message: 'Campaign updated successfully',
+      timestamp: new Date().toISOString()
+    });
   } catch (err: any) {
-    res.status(400).json({ message: err.errors?.[0]?.message || err.message });
+    res.status(400).json({ 
+      message: err.errors?.[0]?.message || err.message,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 };
