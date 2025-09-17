@@ -34,7 +34,7 @@ curl -X GET http://localhost:5000/campaigns/test-campaign-1
 
 
 
-ths : curl http://localhost:5000/campaigns/public/links
+ths : curl https://bzbac.onrender.com/campaigns/public/links
 [{"slug":"test-campaign-15","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_full.mp4 ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756145033/campaigns/test-campaign-15_full.jpg ","waLink":"https://wa.me/1234567890 ","waButtonLabel":"Order on WhatsApp","popupTriggerType":"seconds","popupTriggerValue":8},{"slug":"What","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756142112/campaigns/What%20_full.mp4 ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756142112/campaigns/What%20_full.jpg ","waLink":"WhatsApp","waButtonLabel":"Chat on WhatsApp","popupTriggerType":null,"popupTriggerValue":null},{"slug":"Camping","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756032871/campaigns/Camping%20_full.mp4 ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1756032871/campaigns/Camping%20_full.jpg ","waLink":"WhatsApp ","waButtonLabel":"Chat on WhatsApp","popupTriggerType":null,"popupTriggerValue":null},{"slug":"what do u mean bro","fullVideoUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.webm ","fullThumbnailUrl":"https://res.cloudinary.com/defo7ecih/video/upload/v1755940432/campaigns/what%20do%20u%20mean%20bro_full.jpg ","waLink":"https://wa.me/1234567890 ","waButtonLabel":"Chat on WhatsApp","popupTriggerType":null,"popupTriggerValue":null}]a@a:~/bzbac$ 
 
 
