@@ -51,7 +51,7 @@ export async function uploadToFilestack(
   });
 
   return {
-    secure_url: filestackUrl,                    // >70 MB video on Filestack
+    secure_url: filestackUrl,                    // >70 MB video on Filestackjj
     thumbnail_url: cloudinaryThumb.secure_url,   // Cloudinary-generated thumbnail
   };
 }
