@@ -63,6 +63,7 @@ export const getBySlug = async (req: Request, res: Response) => {
       { slug },
       {
         _id: 0,
+        slug: 1,
         fullVideoUrl: 1,
         fullThumbnailUrl: 1,
         waLink: 1,
