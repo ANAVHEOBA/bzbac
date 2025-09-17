@@ -64,20 +64,20 @@ export async function uploadToFilestack(
   });
 
   /* 2. tiny 2-s clip → Cloudinary (thumbnail only) */
-  const clip = await snip2sec(buffer);
-  const thumb = await new Promise<{ secure_url: string }>((res, rej) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        resource_type: 'video',
-        folder: 'campaigns',
-        public_id: `${publicId}_thumb`,
-        format: 'jpg',
-        start_offset: '1',
-      },
-      (err, result) => (err ? rej(err) : res(result!))
-    );
-    stream.end(clip);
-  });
+ 
+const clip = await snip2sec(buffer);
+const thumb = await new Promise<{ secure_url: string }>((res, rej) => {
+  const stream = cloudinary.uploader.upload_stream(
+    {
+      resource_type: 'image',   // ← KEY:  image, not video
+      folder: 'campaigns',
+      public_id: `${publicId}_thumb`,
+      start_offset: '1',        // frame at 1 s
+    },
+    (err, result) => (err ? rej(err) : res(result!))
+  );
+  stream.end(clip);
+});
 
   return {
     secure_url: filestackUrl,
