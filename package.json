@@ -31,6 +31,7 @@
     "@smash-sdk/uploader": "^2.1.5",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
+    "bullmq": "^5.58.5",
     "busboy": "^1.6.0",
     "cloudinary": "^2.7.0",
     "cors": "^2.8.5",

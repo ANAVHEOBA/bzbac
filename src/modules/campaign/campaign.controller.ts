@@ -1,3 +1,4 @@
+// src/modules/campaign/campaign.controller.ts
 import { Request, Response } from 'express';
 import multer from 'multer';
 import { campaignCreateSchema, campaignPatchSchema } from './campaign.schema';
@@ -7,6 +8,8 @@ import { uploadToFilestack } from '../../services/filestack';
 import { CampaignModel } from './campaign.model';
 import { cache } from '../../utils/cache';
 import axios from 'axios';
+import { videoQueue } from './campaign.queue';
+import { Job } from 'bullmq';
 
 /* ---------- small helper: retry wrapper ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -29,52 +32,36 @@ async function cloudinaryWithRetry(buffer: Buffer, publicId: string) {
 async function generateThumbnailForFilestack(videoUrl: string, publicId: string) {
   try {
     console.log('🖼️ Generating thumbnail for Filestack video...');
-    
-    // Download first few MB of the video to create thumbnail
     const response = await axios.get(videoUrl, {
       responseType: 'arraybuffer',
       timeout: 30000,
-      headers: { 'Range': 'bytes=0-10485760' } // Download first 10MB
+      headers: { 'Range': 'bytes=0-10485760' } // first 10 MB
     });
-    
     const buffer = Buffer.from(response.data);
-    
-    // Use Cloudinary to generate thumbnail from the video segment
     const { thumbnail_url } = await cloudinaryWithRetry(buffer, `${publicId}_thumb`);
-    
     console.log('✅ Thumbnail generated:', thumbnail_url);
     return thumbnail_url;
   } catch (error) {
     console.error('❌ Thumbnail generation failed:', error);
-    // Fallback: return Filestack video with video_snapshot transformation
     return `${videoUrl}/video_snapshot/time:1/output=format:jpg/resize=width:640,height:360,fit:crop`;
   }
 }
 
 /* ---------- UPDATED: Upload logic with proper typing ---------- */
-async function uploadSingleVideo(buffer: Buffer, publicId: string) {
+export async function uploadSingleVideo(buffer: Buffer, publicId: string) {
   const sizeMB = buffer.length / 1024 / 1024;
-  
   if (sizeMB <= 70) {
     console.log('🚀 Using Cloudinary for both upload and thumbnail (≤70 MB)');
     return cloudinaryWithRetry(buffer, publicId);
   }
-  
   console.log('🚀 Using Filestack for upload, Cloudinary for thumbnail (>70 MB)');
-  
-  // Upload to Filestack
   const filestackResult = await uploadToFilestack(buffer, publicId);
-  
-  // Generate thumbnail using Cloudinary
   const thumbnailUrl = await generateThumbnailForFilestack(filestackResult.secure_url, publicId);
-  
   return {
     secure_url: filestackResult.secure_url,
     thumbnail_url: thumbnailUrl
   };
 }
-
-/* ---------- Rest of your existing code remains the same ---------- */
 
 /* ---------- JSON-only create ---------- */
 export const create = async (req: Request, res: Response) => {
@@ -97,94 +84,42 @@ export const list = async (_req: Request, res: Response) => {
 export const getBySlug = async (req: Request, res: Response) => {
   const { slug } = req.params;
   const cacheKey = `campaign:${slug}`;
-
   let campaign = await cache.get(cacheKey);
   if (!campaign) {
     campaign = await CampaignModel.findOne(
       { slug },
-      {
-        _id: 0,
-        fullVideoUrl: 1,
-        fullThumbnailUrl: 1,
-        waLink: 1,
-        waButtonLabel: 1,
-        caption: 1,
-        popupTriggerType: 1,
-        popupTriggerValue: 1,
-        createdAt: 1,
-        updatedAt: 1,
-      }
+      { _id: 0, fullVideoUrl: 1, fullThumbnailUrl: 1, waLink: 1, waButtonLabel: 1, caption: 1, popupTriggerType: 1, popupTriggerValue: 1, createdAt: 1, updatedAt: 1 }
     ).lean();
-
     if (!campaign) return res.status(404).json({ message: 'Not found' });
     await cache.set(cacheKey, campaign);
   }
-
   res.json(campaign);
 };
 
-/* ---------- single-shot upload ---------- */
+/* ---------- single-shot upload (legacy) ---------- */
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadCampaign = async (req: Request, res: Response) => {
-  // Increase timeout for very large files (10 minutes)
   req.setTimeout(600_000);
-  
   try {
     const files = req.files as { [field: string]: Express.Multer.File[] };
-    console.log('📁 files received:', Object.keys(files || {}));
+    if (!files?.full?.[0]) return res.status(400).json({ message: 'Full video file is required' });
 
-    if (!files || !files.full?.[0]) {
-      return res.status(400).json({ message: 'Full video file is required' });
-    }
-
-    const {
-      slug,
-      caption = '',
-      waLink,
-      waButtonLabel = 'Chat on WhatsApp',
-      popupTriggerType = null,
-      popupTriggerValue = null,
-    } = req.body;
-
-    if (!slug || !waLink) {
-      return res.status(400).json({ message: 'slug and waLink are required' });
-    }
+    const { slug, caption = '', waLink, waButtonLabel = 'Chat on WhatsApp', popupTriggerType = null, popupTriggerValue = null } = req.body;
+    if (!slug || !waLink) return res.status(400).json({ message: 'slug and waLink are required' });
 
     const file = files.full[0];
-    const sizeMB = file.buffer.length / 1024 / 1024;
-    
-    console.log(`📊 Processing ${sizeMB.toFixed(2)} MB file...`);
-    
-    // Add progress logging
+    console.log(`📊 Processing ${(file.buffer.length / 1024 / 1024).toFixed(2)} MB file...`);
     const startTime = Date.now();
     const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${slug}_full`);
-    const uploadTime = Date.now() - startTime;
-    
-    console.log(`✅ Upload completed in ${uploadTime}ms`);
-    console.log(`📺 Video URL: ${secure_url}`);
-    console.log(`🖼️ Thumbnail URL: ${thumbnail_url}`);
+    console.log(`✅ Upload completed in ${Date.now() - startTime}ms`);
 
-    const campaign = await createCampaign({
-      slug,
-      fullVideoUrl: secure_url,
-      fullThumbnailUrl: thumbnail_url,
-      waLink,
-      waButtonLabel,
-      caption,
-      popupTriggerType,
-      popupTriggerValue,
-    });
-
+    const campaign = await createCampaign({ slug, fullVideoUrl: secure_url, fullThumbnailUrl: thumbnail_url, waLink, waButtonLabel, caption, popupTriggerType, popupTriggerValue });
     await cache.invalidate('campaign:*');
     res.status(201).json(campaign);
   } catch (err: any) {
     console.error('💥 uploadCampaign error:', err);
-    console.error('Error stack:', err.stack);
-    res.status(502).json({ 
-      message: err.message || 'Upload failed',
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    res.status(502).json({ message: err.message || 'Upload failed' });
   }
 };
 
@@ -194,7 +129,6 @@ export const listPublicLinks = async (_req: Request, res: Response) => {
     .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue')
     .sort({ createdAt: -1 })
     .lean();
-
   const links = campaigns.map(c => ({
     slug: c.slug,
     fullVideoUrl: c.fullVideoUrl,
@@ -204,7 +138,6 @@ export const listPublicLinks = async (_req: Request, res: Response) => {
     popupTriggerType: c.popupTriggerType,
     popupTriggerValue: c.popupTriggerValue,
   }));
-
   res.json(links);
 };
 
@@ -225,41 +158,16 @@ export const remove = async (req: Request, res: Response) => {
 export const getMetaTags = async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const campaign = await CampaignModel.findOne(
-      { slug },
-      { _id: 0, slug: 1, caption: 1, fullThumbnailUrl: 1 }
-    );
+    const campaign = await CampaignModel.findOne({ slug }, { _id: 0, slug: 1, caption: 1, fullThumbnailUrl: 1 });
     if (!campaign) return res.status(404).send('Campaign not found');
-
     const title = campaign.slug;
     const description = campaign.caption || `${campaign.slug} video`;
     const image = campaign.fullThumbnailUrl;
-    const url = `https://bzfront.vercel.app/campaigns/  ${encodeURIComponent(slug)}`;
-
-    const html = `
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>${title}</title>
-    <meta name="description" content="${description}" />
-    <meta property="og:type" content="video.other" />
-    <meta property="og:title" content="${title}" />
-    <meta property="og:description" content="${description}" />
-    <meta property="og:image" content="${image}" />
-    <meta property="og:url" content="${url}" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${title}" />
-    <meta name="twitter:description" content="${description}" />
-    <meta name="twitter:image" content="${image}" />
-    <meta http-equiv="refresh" content="0;url=${url}" />
-  </head>
-  <body></body>
-</html>`.trim();
-
+    const url = `https://bzfront.vercel.app/campaigns/${encodeURIComponent(slug)}`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${title}</title><meta name="description" content="${description}" /><meta property="og:type" content="video.other" /><meta property="og:title" content="${title}" /><meta property="og:description" content="${description}" /><meta property="og:image" content="${image}" /><meta property="og:url" content="${url}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${title}" /><meta name="twitter:description" content="${description}" /><meta name="twitter:image" content="${image}" /><meta http-equiv="refresh" content="0;url=${url}" /></head><body></body></html>`;
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
+    res.send(html.trim());
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
@@ -283,15 +191,45 @@ export const update = async (req: Request, res: Response) => {
       payload = campaignPatchSchema.parse(req.body);
     }
 
-    const updated = await CampaignModel.findOneAndUpdate({ slug: rawSlug }, payload, {
-      new: true,
-      runValidators: true,
-    });
+    const updated = await CampaignModel.findOneAndUpdate({ slug: rawSlug }, payload, { new: true, runValidators: true });
     if (!updated) return res.status(404).json({ message: 'Campaign not found' });
-
     await cache.invalidate('campaign:*');
     res.json(updated);
   } catch (err: any) {
     res.status(400).json({ message: err.errors?.[0]?.message || err.message });
+  }
+};
+
+/* ---------- ASYNC UPLOAD: memory → queue → 202 ---------- */
+export const uploadCampaignAsync = async (req: Request, res: Response) => {
+  try {
+    const files = req.files as { [field: string]: Express.Multer.File[] };
+    if (!files?.full?.[0]) return res.status(400).json({ message: 'Full video file is required' });
+
+    const file = files.full[0];
+    const { slug, caption = '', waLink, waButtonLabel = 'Chat on WhatsApp', popupTriggerType = null, popupTriggerValue = null } = req.body;
+    if (!slug || !waLink) return res.status(400).json({ message: 'slug and waLink are required' });
+
+    const bufferB64 = file.buffer.toString('base64');
+    const job = await videoQueue.add('processVideo', { bufferB64, slug, caption, waLink, waButtonLabel, popupTriggerType, popupTriggerValue });
+    res.status(202).json({ jobId: job.id, status: 'queued' });
+  } catch (err: any) {
+    console.error('💥 uploadCampaignAsync error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ---------- POLLING ENDPOINT ---------- */
+export const getUploadStatus = async (req: Request, res: Response) => {
+  try {
+    const job = await videoQueue.getJob(req.params.jobId);
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+    const status = await job.getState();
+    const returnData: any = { status };
+    if (status === 'completed') returnData.urls = job.returnvalue;
+    else if (status === 'failed') returnData.error = job.failedReason;
+    res.json(returnData);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 };

@@ -5,11 +5,12 @@ import {
   create,
   list,
   getBySlug,
-  uploadCampaign,
+  uploadCampaignAsync,   
+  getUploadStatus,       
   listPublicLinks,
   remove,
   getMetaTags,
-  update      
+  update
 } from './campaign.controller';
 import { campaignCreateSchema } from './campaign.schema';
 import { validateInput } from '../../middleware/input-validator';
@@ -20,14 +21,10 @@ const campaignRouter = Router();
 /* legacy JSON routes */
 campaignRouter
   .route('/')
-  .post(
-    validateInput(campaignCreateSchema),
-    adminAuth,
-    create
-  )
+  .post(validateInput(campaignCreateSchema), adminAuth, create)
   .get(adminAuth, list);
 
-/* single-shot upload */
+/* ASYNC upload – memory → queue → 202 */
 campaignRouter
   .route('/upload')
   .post(
@@ -36,10 +33,14 @@ campaignRouter
       { name: 'preview', maxCount: 1 },
       { name: 'full', maxCount: 1 },
     ]),
-    uploadCampaign
+    uploadCampaignAsync          // ← swapped
   );
 
-  campaignRouter
+/* status polling */
+campaignRouter.get('/upload-status/:jobId', getUploadStatus);
+
+/* UPDATE (keep unchanged) */
+campaignRouter
   .route('/:slug')
   .put(
     adminAuth,
@@ -50,14 +51,10 @@ campaignRouter
     update
   );
 
-/* public landing page */
+/* public routes (keep unchanged) */
 campaignRouter.get('/:slug', getBySlug);
-
-/* public meta tags page (for link unfurl) */
-campaignRouter.get('/:slug/meta', getMetaTags);   // <-- NEW
-
+campaignRouter.get('/:slug/meta', getMetaTags);
 campaignRouter.get('/public/links', listPublicLinks);
-
 campaignRouter.delete('/:slug', adminAuth, remove);
 
 export default campaignRouter;
