@@ -10,17 +10,14 @@ ffmpeg.setFfmpegPath(ffmpegStatic as string);
 
 const API_KEY = process.env.FILESTACK_API_KEY!;
 
-/* ---- helper: first 2 s → buffer (no audio, web-safe) ---- */
-async function snip2sec(original: Buffer): Promise<Buffer> {
+/* ---- export ONE frame as JPG ---- */
+async function extractFrame(original: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     ffmpeg()
       .input(Readable.from(original))
-      .inputOptions(['-t 2']) // first 2 s
-      .outputFormat('mp4')
-      .videoCodec('libx264')
-      .audioCodec('aac') // keep tiny audio
-      .outputOptions(['-movflags frag_keyframe+empty_moov']) // fast pipe
+      .outputFormat('image2')   // tell ffmpeg we want image output
+      .outputOptions(['-vframes 1', '-q:v 2']) // 1 frame, high quality
       .on('error', reject)
       .on('end', () => resolve(Buffer.concat(chunks)))
       .pipe()
@@ -34,7 +31,7 @@ export async function uploadToFilestack(
 ): Promise<{ secure_url: string; thumbnail_url: string }> {
   const filename = basename(publicId) + '.mp4';
 
-  /* 1. big video → Filestack (no change) */
+  /* 1. big video → Filestack (unchanged) */
   const filestackUrl = await new Promise<string>((resolve, reject) => {
     const req = https.request(
       {
@@ -63,21 +60,19 @@ export async function uploadToFilestack(
     req.end();
   });
 
-  /* 2. tiny 2-s clip → Cloudinary (thumbnail only) */
- 
-const clip = await snip2sec(buffer);
-const thumb = await new Promise<{ secure_url: string }>((res, rej) => {
-  const stream = cloudinary.uploader.upload_stream(
-    {
-      resource_type: 'image',   // ← KEY:  image, not video
-      folder: 'campaigns',
-      public_id: `${publicId}_thumb`,
-      start_offset: '1',        // frame at 1 s
-    },
-    (err, result) => (err ? rej(err) : res(result!))
-  );
-  stream.end(clip);
-});
+  /* 2. single JPG frame → Cloudinary (image resource) */
+  const frame = await extractFrame(buffer);
+  const thumb = await new Promise<{ secure_url: string }>((res, rej) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: 'image',
+        folder: 'campaigns',
+        public_id: `${publicId}_thumb`,
+      },
+      (err, result) => (err ? rej(err) : res(result!))
+    );
+    stream.end(frame);
+  });
 
   return {
     secure_url: filestackUrl,
