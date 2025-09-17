@@ -69,7 +69,7 @@ export const getBySlug = async (req: Request, res: Response) => {
         waButtonLabel: 1,
         caption: 1,
         popupTriggerType: 1,
-        popupTriggerValue: 1,
+        popupTriggerValue: 1,//aa
         createdAt: 1,
         updatedAt: 1,
       }
