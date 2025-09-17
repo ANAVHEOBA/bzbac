@@ -25,6 +25,7 @@
     "@types/mongoose": "^5.11.96",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.3.0",
+    "@types/tmp": "^0.2.6",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2"
   },
@@ -46,6 +47,7 @@
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
     "redis": "^5.8.2",
+    "tmp": "^0.2.5",
     "ts-node-dev": "^2.0.0",
     "zod": "^4.0.17"
   }
