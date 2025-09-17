@@ -11,7 +11,7 @@ export async function uploadToFilestack(
 ): Promise<{ secure_url: string; thumbnail_url: string }> {
   const filename = basename(publicId) + '.mp4';
 
-  /* 1. push bytes to Filestack (same as before) … */
+  /* 1. push bytes to Filestack … */
   const filestackUrl = await new Promise<string>((resolve, reject) => {
     const options: https.RequestOptions = {
       hostname: 'www.filestackapi.com',
@@ -41,19 +41,17 @@ export async function uploadToFilestack(
     req.end();
   });
 
-  /* 2. let Cloudinary ingest the public video and generate a thumbnail */
+  /* 2. let Cloudinary create a JPG poster from the public video URL */
   const cloudinaryThumb = await cloudinary.uploader.upload(filestackUrl, {
-    resource_type: 'video',
+    resource_type: 'image',          // ← KEY FIX: ask for an *image*
     folder: 'campaigns',
     public_id: `${publicId}_thumb`,
-    /* pick any frame you like – here we take the 2-second mark */
-    start_offset: '2',
-    /* we only need the jpg, so tell Cloudinary to return a single image */
-    format: 'jpg',
+    format: 'jpg',                   // force JPG output
+    start_offset: '2',               // frame at 2 s
   });
 
   return {
-    secure_url: filestackUrl,          // >70 MB video hosted on Filestack
-    thumbnail_url: cloudinaryThumb.secure_url, // thumbnail made by Cloudinary
+    secure_url: filestackUrl,                    // >70 MB video on Filestack
+    thumbnail_url: cloudinaryThumb.secure_url,   // Cloudinary-generated thumbnail
   };
 }
