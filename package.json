@@ -47,6 +47,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "redis": "^5.8.2",
     "tmp": "^0.2.5",
     "ts-node-dev": "^2.0.0",
