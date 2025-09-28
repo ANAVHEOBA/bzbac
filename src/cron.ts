@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import crypto from 'crypto';
 
-const HOOK = 'https://api.vercel.com/v1/integrations/deploy/prj_xdroPRMpdOhJkq0JV4DZhrK63TGv/JENWnaEMrQ';
+const HOOK = 'https://api.vercel.com/v1/integrations/deploy/prj_xdroPRMpdOhJkq0JV4DZhrK63TGv/I5vjp0CggU';
 const API  = 'https://bzbac.onrender.com/campaigns/public/links';
 
 let lastHash = '';
