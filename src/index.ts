@@ -1,6 +1,7 @@
 // src/index.ts
 import dotenv from 'dotenv';
 import { createApp } from './app';
+import './cron';          // ← ADD THIS LINE
 
 dotenv.config();
 
