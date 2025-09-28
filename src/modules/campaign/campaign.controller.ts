@@ -3,13 +3,13 @@ import multer from 'multer';
 import { campaignCreateSchema, campaignPatchSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
 import { uploadVideo } from '../../services/cloudinary';
-import { uploadToFilestack } from '../../services/filestack'; // <-- NEW
+import { uploadToFilestack } from '../../services/filestack';
 import { CampaignModel } from './campaign.model';
 import { cache } from '../../utils/cache';
+import fetch from 'node-fetch'; 
 
 /* ---------- small helper: retry wrapper ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
 async function cloudinaryWithRetry(buffer: Buffer, publicId: string) {
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -24,7 +24,7 @@ async function cloudinaryWithRetry(buffer: Buffer, publicId: string) {
   throw lastErr;
 }
 
-/* ---------- size-based uploader (used in both create & update) ---------- */
+/* ---------- size-based uploader ---------- */
 async function uploadSingleVideo(buffer: Buffer, publicId: string) {
   const sizeMB = buffer.length / 1024 / 1024;
   if (sizeMB <= 70) {
@@ -34,6 +34,59 @@ async function uploadSingleVideo(buffer: Buffer, publicId: string) {
   console.log('🚀 using Filestack (>70 MB)');
   return uploadToFilestack(buffer, publicId);
 }
+
+/* ---------- trigger Vercel rebuild ---------- */
+function triggerRebuild() {
+  const HOOK = 'https://api.vercel.com/v1/integrations/deploy/prj_xdroPRMpdOhJkq0JV4DZhrK63TGv/I5vjp0CggU ';
+  fetch(HOOK, { method: 'POST' })
+    .then(() => console.log('[hook] rebuild requested'))
+    .catch(() => {/* ignore */});
+}
+
+/* ---------- single-shot upload ---------- */
+const upload = multer({ storage: multer.memoryStorage() });
+
+export const uploadCampaign = async (req: Request, res: Response) => {
+  req.setTimeout(120_000);
+  try {
+    const files = req.files as { [field: string]: Express.Multer.File[] };
+    console.log('📁 files received:', Object.keys(files || {}));
+    if (!files?.full?.[0]) return res.status(400).json({ message: 'Full video file is required' });
+
+    const {
+      slug,
+      caption = '',
+      waLink,
+      waButtonLabel = 'Chat on WhatsApp',
+      popupTriggerType = null,
+      popupTriggerValue = null,
+    } = req.body;
+    if (!slug || !waLink) return res.status(400).json({ message: 'slug and waLink are required' });
+
+    const file = files.full[0];
+    const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${slug}_full`);
+
+    const campaign = await createCampaign({
+      slug,
+      fullVideoUrl: secure_url,
+      fullThumbnailUrl: thumbnail_url,
+      waLink,
+      waButtonLabel,
+      caption,
+      popupTriggerType,
+      popupTriggerValue,
+    });
+
+    await cache.invalidate('campaign:*');
+    triggerRebuild(); // ← INSTANT REBUILD
+    res.status(201).json(campaign);
+  } catch (err: any) {
+    console.error('💥 uploadCampaign:', err);
+    res.status(502).json({ message: err.message || 'Upload failed' });
+  }
+};
+
+
 
 /* ---------- JSON-only create ---------- */
 export const create = async (req: Request, res: Response) => {
@@ -82,54 +135,7 @@ export const getBySlug = async (req: Request, res: Response) => {
   res.json(campaign);
 };
 
-/* ---------- single-shot upload ---------- */
-const upload = multer({ storage: multer.memoryStorage() });
 
-export const uploadCampaign = async (req: Request, res: Response) => {
-  req.setTimeout(120_000); // Filestack may be slower
-
-  try {
-    const files = req.files as { [field: string]: Express.Multer.File[] };
-    console.log('📁 files received:', Object.keys(files || {}));
-
-    if (!files || !files.full?.[0]) {
-      return res.status(400).json({ message: 'Full video file is required' });
-    }
-
-    const {
-      slug,
-      caption = '',
-      waLink,
-      waButtonLabel = 'Chat on WhatsApp',
-      popupTriggerType = null,
-      popupTriggerValue = null,
-    } = req.body;
-
-    if (!slug || !waLink) {
-      return res.status(400).json({ message: 'slug and waLink are required' });
-    }
-
-    const file = files.full[0];
-    const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${slug}_full`);
-
-    const campaign = await createCampaign({
-      slug,
-      fullVideoUrl: secure_url,
-      fullThumbnailUrl: thumbnail_url,
-      waLink,
-      waButtonLabel,
-      caption,
-      popupTriggerType,
-      popupTriggerValue,
-    });
-
-    await cache.invalidate('campaign:*');
-    res.status(201).json(campaign);
-  } catch (err: any) {
-    console.error('💥 uploadCampaign:', err);
-    res.status(502).json({ message: err.message || 'Upload failed' });
-  }
-};
 
 /* ---------- public links ---------- */
 export const listPublicLinks = async (_req: Request, res: Response) => {
