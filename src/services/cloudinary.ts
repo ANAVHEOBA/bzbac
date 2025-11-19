@@ -13,7 +13,12 @@ cloudinary.config({
 export const uploadVideo = (buffer: Buffer, publicId?: string) =>
   new Promise<{ secure_url: string; thumbnail_url: string }>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { resource_type: 'video', folder: 'campaigns', public_id: publicId },
+      {
+        resource_type: 'video',
+        folder: 'campaigns',
+        public_id: publicId,
+        chunk_size: 6000000, // 6MB chunks for reliable large file uploads
+      },
       (err, result) => {
         if (err) return reject(err);
         const thumbnail_url = result?.secure_url?.replace(/\.[^.]+$/, '.jpg') || '';

@@ -3,36 +3,28 @@ import multer from 'multer';
 import { campaignCreateSchema, campaignPatchSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
 import { uploadVideo } from '../../services/cloudinary';
-import { uploadToFilestack } from '../../services/filestack';
 import { CampaignModel } from './campaign.model';
 import { cache } from '../../utils/cache';
 import fetch from 'node-fetch'; 
 
-/* ---------- small helper: retry wrapper ---------- */
+/* ---------- Cloudinary uploader with retry logic ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-async function cloudinaryWithRetry(buffer: Buffer, publicId: string) {
+async function uploadWithRetry(buffer: Buffer, publicId: string) {
+  const sizeMB = buffer.length / 1024 / 1024;
+  console.log(`🚀 Uploading to Cloudinary (${sizeMB.toFixed(2)} MB)`);
+
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       return await uploadVideo(buffer, publicId);
     } catch (err) {
       lastErr = err;
+      console.log(`⚠️  Attempt ${attempt} failed, retrying...`);
       if (attempt === 3) break;
       await sleep(1000 * 2 ** (attempt - 1));
     }
   }
   throw lastErr;
-}
-
-/* ---------- size-based uploader ---------- */
-async function uploadSingleVideo(buffer: Buffer, publicId: string) {
-  const sizeMB = buffer.length / 1024 / 1024;
-  if (sizeMB <= 70) {
-    console.log('🚀 using Cloudinary (≤70 MB)');
-    return cloudinaryWithRetry(buffer, publicId);
-  }
-  console.log('🚀 using Filestack (>70 MB)');
-  return uploadToFilestack(buffer, publicId);
 }
 
 /* ---------- trigger Vercel rebuild ---------- */
@@ -64,7 +56,7 @@ export const uploadCampaign = async (req: Request, res: Response) => {
     if (!slug || !waLink) return res.status(400).json({ message: 'slug and waLink are required' });
 
     const file = files.full[0];
-    const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${slug}_full`);
+    const { secure_url, thumbnail_url } = await uploadWithRetry(file.buffer, `${slug}_full`);
 
     const campaign = await createCampaign({
       slug,
@@ -226,7 +218,7 @@ export const update = async (req: Request, res: Response) => {
 
     if (hasFile) {
       const file = files.full[0];
-      const { secure_url, thumbnail_url } = await uploadSingleVideo(file.buffer, `${rawSlug}_full`);
+      const { secure_url, thumbnail_url } = await uploadWithRetry(file.buffer, `${rawSlug}_full`);
       payload = { ...req.body, fullVideoUrl: secure_url, fullThumbnailUrl: thumbnail_url };
     } else {
       payload = campaignPatchSchema.parse(req.body);
