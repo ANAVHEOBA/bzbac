@@ -2,16 +2,16 @@ import { Request, Response } from 'express';
 import multer from 'multer';
 import { campaignCreateSchema, campaignPatchSchema } from './campaign.schema';
 import { createCampaign, findCampaignBySlug, listCampaigns } from './campaign.crud';
-import { uploadVideo } from '../../services/cloudinary';
+import { uploadVideo } from '../../services/imagekit';
 import { CampaignModel } from './campaign.model';
 import { cache } from '../../utils/cache';
 import fetch from 'node-fetch'; 
 
-/* ---------- Cloudinary uploader with retry logic ---------- */
+/* ---------- ImageKit uploader with retry logic ---------- */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function uploadWithRetry(buffer: Buffer, publicId: string) {
   const sizeMB = buffer.length / 1024 / 1024;
-  console.log(`🚀 Uploading to Cloudinary (${sizeMB.toFixed(2)} MB)`);
+  console.log(`🚀 Uploading to ImageKit (${sizeMB.toFixed(2)} MB)`);
 
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
