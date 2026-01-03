@@ -28,9 +28,10 @@ export const uploadVideo = (buffer: Buffer, publicId?: string): Promise<{ secure
         }
 
         // ImageKit generates thumbnails automatically for videos
-        // Use the /ik-thumbnail.jpg transformation for video thumbnails
+        // Append /ik-thumbnail.jpg after the video URL to get thumbnail
+        // Example: https://ik.imagekit.io/xxx/video.mp4/ik-thumbnail.jpg
         const videoUrl = result.url;
-        const thumbnailUrl = videoUrl.replace(/\.[^.]+$/, '/ik-thumbnail.jpg');
+        const thumbnailUrl = `${videoUrl}/ik-thumbnail.jpg`;
 
         resolve({
           secure_url: videoUrl,
