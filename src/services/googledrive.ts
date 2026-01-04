@@ -60,9 +60,11 @@ export const uploadVideo = async (
     },
   });
 
-  // Generate direct URLs
-  const secure_url = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  const thumbnail_url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1280`;
+  // Generate URLs that work better for streaming
+  // Using Google's direct file serving URL
+  const secure_url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${process.env.GOOGLE_API_KEY}`;
+  // Thumbnail using lh3 format (more reliable)
+  const thumbnail_url = `https://lh3.googleusercontent.com/d/${fileId}=w1280`;
 
   console.log(`✅ Uploaded to Google Drive: ${fileName} (${fileId})`);
 
