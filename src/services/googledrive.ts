@@ -5,20 +5,20 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '';
 
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  },
-  scopes: SCOPES,
+// OAuth2 client using your personal Google account
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET
+);
+
+// Set refresh token - this lets us upload to YOUR Drive (15GB free)
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
 });
 
-const drive = google.drive({ version: 'v3', auth });
-
-const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '';
-const API_KEY = process.env.GOOGLE_API_KEY || '';
+const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
 function bufferToStream(buffer: Buffer): Readable {
   const stream = new Readable();
@@ -33,7 +33,7 @@ export const uploadVideo = async (
 ): Promise<{ secure_url: string; thumbnail_url: string }> => {
   const fileName = publicId ? `${publicId}.mp4` : `video_${Date.now()}.mp4`;
 
-  // Upload file to Google Drive
+  // Upload file to Google Drive (YOUR account's storage)
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
@@ -61,10 +61,7 @@ export const uploadVideo = async (
   });
 
   // Generate direct URLs
-  // Direct download/streaming URL
   const secure_url = `https://drive.google.com/uc?export=download&id=${fileId}`;
-
-  // Thumbnail URL (Google Drive auto-generates thumbnails for videos)
   const thumbnail_url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1280`;
 
   console.log(`✅ Uploaded to Google Drive: ${fileName} (${fileId})`);
@@ -76,7 +73,6 @@ export const uploadVideo = async (
 };
 
 export const deleteVideo = async (fileUrl: string): Promise<void> => {
-  // Extract file ID from URL
   const match = fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
   if (!match) return;
 
