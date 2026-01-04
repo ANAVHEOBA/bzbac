@@ -1,11 +1,6 @@
 // src/services/googledrive.ts
 import { google } from 'googleapis';
 import { Readable } from 'stream';
-import { spawn } from 'child_process';
-import ffmpegPath from 'ffmpeg-static';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -31,66 +26,31 @@ function bufferToStream(buffer: Buffer): Readable {
   return stream;
 }
 
-// Extract thumbnail from video using ffmpeg
-async function extractThumbnail(videoBuffer: Buffer): Promise<Buffer> {
-  const tempDir = os.tmpdir();
-  const tempVideoPath = path.join(tempDir, `video_${Date.now()}.mp4`);
-  const tempThumbPath = path.join(tempDir, `thumb_${Date.now()}.jpg`);
-
-  try {
-    // Write video buffer to temp file
-    fs.writeFileSync(tempVideoPath, videoBuffer);
-
-    // Extract thumbnail at 1 second mark
-    await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn(ffmpegPath as string, [
-        '-i', tempVideoPath,
-        '-ss', '00:00:01',      // Seek to 1 second
-        '-vframes', '1',        // Extract 1 frame
-        '-q:v', '2',            // High quality
-        '-vf', 'scale=1280:-1', // Width 1280, maintain aspect ratio
-        '-y',                   // Overwrite output
-        tempThumbPath
-      ]);
-
-      ffmpeg.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`ffmpeg exited with code ${code}`));
-      });
-
-      ffmpeg.on('error', reject);
-    });
-
-    // Read thumbnail
-    const thumbBuffer = fs.readFileSync(tempThumbPath);
-    return thumbBuffer;
-  } finally {
-    // Cleanup temp files
-    try { fs.unlinkSync(tempVideoPath); } catch {}
-    try { fs.unlinkSync(tempThumbPath); } catch {}
-  }
-}
-
-// Upload a file to Google Drive and make it public
-async function uploadFile(
+export const uploadVideo = async (
   buffer: Buffer,
-  fileName: string,
-  mimeType: string
-): Promise<string> {
+  publicId?: string
+): Promise<{ secure_url: string; thumbnail_url: string }> => {
+  const fileName = publicId ? `${publicId}.mp4` : `video_${Date.now()}.mp4`;
+
+  console.log(`🚀 Uploading to Google Drive...`);
+
+  // Upload file to Google Drive
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
       parents: [FOLDER_ID],
     },
     media: {
-      mimeType,
+      mimeType: 'video/mp4',
       body: bufferToStream(buffer),
     },
-    fields: 'id',
+    fields: 'id, name',
   });
 
   const fileId = response.data.id;
-  if (!fileId) throw new Error('Failed to upload file');
+  if (!fileId) {
+    throw new Error('Failed to upload file to Google Drive');
+  }
 
   // Make file publicly accessible
   await drive.permissions.create({
@@ -101,40 +61,12 @@ async function uploadFile(
     },
   });
 
-  return fileId;
-}
+  console.log(`✅ Uploaded to Google Drive: ${fileName} (${fileId})`);
 
-export const uploadVideo = async (
-  buffer: Buffer,
-  publicId?: string
-): Promise<{ secure_url: string; thumbnail_url: string }> => {
-  const baseName = publicId || `video_${Date.now()}`;
-
-  // Upload video first (most important)
-  console.log(`🚀 Uploading video to Google Drive...`);
-  const videoFileId = await uploadFile(buffer, `${baseName}.mp4`, 'video/mp4');
-  console.log(`✅ Video uploaded: ${videoFileId}`);
-
-  // Try to extract and upload thumbnail
-  let thumbnail_url = `https://via.placeholder.com/1280x720/333/fff?text=Video`;
-
-  try {
-    console.log(`🎬 Extracting thumbnail with ffmpeg...`);
-    const thumbnailBuffer = await extractThumbnail(buffer);
-    console.log(`✅ Thumbnail extracted (${(thumbnailBuffer.length / 1024).toFixed(1)} KB)`);
-
-    console.log(`🖼️ Uploading thumbnail to Google Drive...`);
-    const thumbFileId = await uploadFile(thumbnailBuffer, `${baseName}_thumb.jpg`, 'image/jpeg');
-    console.log(`✅ Thumbnail uploaded: ${thumbFileId}`);
-
-    thumbnail_url = `https://drive.google.com/uc?export=download&id=${thumbFileId}`;
-  } catch (err) {
-    console.error('⚠️ Thumbnail extraction failed, using placeholder:', (err as Error).message);
-    // Continue with placeholder - don't fail the whole upload
-  }
-
-  // Generate video URL
-  const secure_url = `https://drive.google.com/uc?export=download&id=${videoFileId}`;
+  // Simple direct URLs
+  const secure_url = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  // Use placeholder thumbnail for now
+  const thumbnail_url = `https://via.placeholder.com/1280x720/1a1a2e/ffffff?text=Video`;
 
   return {
     secure_url,
