@@ -9,6 +9,7 @@ export interface ICampaign extends Document {
   caption?: string;
   popupTriggerType: 'seconds' | 'percent' | null;
   popupTriggerValue: number | null;
+  tags: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,7 @@ const campaignSchema = new Schema<ICampaign>(
     caption: { type: String, default: '' },
     popupTriggerType: { type: String, enum: ['seconds', 'percent', null], default: null },
     popupTriggerValue: { type: Number, default: null },
+    tags: { type: [String], default: [] },
   },
   { timestamps: true }
 );

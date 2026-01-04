@@ -1,8 +1,9 @@
 import express from 'express';
-import cors from 'cors';                // ← add
+import cors from 'cors';
 import { connectDB } from './config/db';
 import adminRouter from './modules/admin/admin.router';
 import campaignRouter from './modules/campaign/campaign.router';
+import analyticsRouter from './modules/analytics/analytics.router';
 
 export const createApp = async () => {
   await connectDB();
@@ -22,6 +23,7 @@ export const createApp = async () => {
 
   app.use('/admin', adminRouter);
   app.use('/campaigns', campaignRouter);
+  app.use('/track', analyticsRouter);
 
   return app;
 };
