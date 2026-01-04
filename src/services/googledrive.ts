@@ -13,6 +13,7 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_SECRET
 );
 
+// Set refresh token - this lets us upload to YOUR Drive (15GB free)
 oauth2Client.setCredentials({
   refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
 });
@@ -32,9 +33,7 @@ export const uploadVideo = async (
 ): Promise<{ secure_url: string; thumbnail_url: string }> => {
   const fileName = publicId ? `${publicId}.mp4` : `video_${Date.now()}.mp4`;
 
-  console.log(`🚀 Uploading to Google Drive...`);
-
-  // Upload file to Google Drive
+  // Upload file to Google Drive (YOUR account's storage)
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
@@ -44,7 +43,7 @@ export const uploadVideo = async (
       mimeType: 'video/mp4',
       body: bufferToStream(buffer),
     },
-    fields: 'id, name',
+    fields: 'id, name, webContentLink, webViewLink',
   });
 
   const fileId = response.data.id;
@@ -61,12 +60,11 @@ export const uploadVideo = async (
     },
   });
 
-  console.log(`✅ Uploaded to Google Drive: ${fileName} (${fileId})`);
-
-  // Simple direct URLs
+  // Generate direct URLs
   const secure_url = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  // Use placeholder thumbnail for now
-  const thumbnail_url = `https://via.placeholder.com/1280x720/1a1a2e/ffffff?text=Video`;
+  const thumbnail_url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1280`;
+
+  console.log(`✅ Uploaded to Google Drive: ${fileName} (${fileId})`);
 
   return {
     secure_url,
