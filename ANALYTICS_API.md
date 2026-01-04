@@ -195,7 +195,57 @@ ctaButton.addEventListener('click', () => {
 });
 ```
 
-### Share Links with Tracking
+### Generate Share Links (API)
+```bash
+GET /campaigns/:slug/share-links
+```
+
+Generates UTM-tagged share links for all supported platforms.
+
+**Example:**
+```bash
+curl "https://bzbac.onrender.com/campaigns/summer-sale/share-links"
+```
+
+**Response:**
+```json
+{
+  "campaignSlug": "summer-sale",
+  "baseUrl": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale",
+  "shareLinks": {
+    "direct": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale",
+    "facebook": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=facebook",
+    "instagram": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=instagram",
+    "whatsapp": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=whatsapp",
+    "twitter": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=twitter",
+    "tiktok": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=tiktok",
+    "snapchat": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=snapchat",
+    "linkedin": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=linkedin",
+    "telegram": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=telegram",
+    "email": "https://www.assetarleadvideos.name.ng/campaigns/summer-sale?utm_source=email"
+  },
+  "platforms": [
+    {"name": "facebook", "label": "Facebook", "url": "..."},
+    {"name": "instagram", "label": "Instagram", "url": "..."},
+    {"name": "whatsapp", "label": "WhatsApp", "url": "..."},
+    {"name": "twitter", "label": "Twitter/X", "url": "..."},
+    {"name": "tiktok", "label": "TikTok", "url": "..."},
+    {"name": "snapchat", "label": "Snapchat", "url": "..."},
+    {"name": "linkedin", "label": "LinkedIn", "url": "..."},
+    {"name": "telegram", "label": "Telegram", "url": "..."},
+    {"name": "email", "label": "Email", "url": "..."}
+  ]
+}
+```
+
+**Error (404):**
+```json
+{"message": "Campaign not found"}
+```
+
+---
+
+### Share Links (Quick Reference)
 ```
 Facebook:   https://assetarleadvideos.name.ng/c/summer-sale?utm_source=facebook
 Instagram:  https://assetarleadvideos.name.ng/c/summer-sale?utm_source=instagram
