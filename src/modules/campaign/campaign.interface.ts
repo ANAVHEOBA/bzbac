@@ -7,6 +7,7 @@ export interface CampaignDto {
   caption?: string;
   popupTriggerType: 'seconds' | 'percent' | null;
   popupTriggerValue: number | null;
+  tags: string[];
   createdAt?: string;
   updatedAt?: string;
   _id?: string;

@@ -52,6 +52,7 @@ export const uploadCampaign = async (req: Request, res: Response) => {
       waButtonLabel = 'Chat on WhatsApp',
       popupTriggerType = null,
       popupTriggerValue = null,
+      tags = [],
     } = req.body;
     if (!slug || !waLink) return res.status(400).json({ message: 'slug and waLink are required' });
 
@@ -67,6 +68,7 @@ export const uploadCampaign = async (req: Request, res: Response) => {
       caption,
       popupTriggerType,
       popupTriggerValue,
+      tags: Array.isArray(tags) ? tags : JSON.parse(tags || '[]'),
     });
 
     await cache.invalidate('campaign:*');
@@ -114,7 +116,8 @@ export const getBySlug = async (req: Request, res: Response) => {
         waButtonLabel: 1,
         caption: 1,
         popupTriggerType: 1,
-        popupTriggerValue: 1,//aa
+        popupTriggerValue: 1,
+        tags: 1,
         createdAt: 1,
         updatedAt: 1,
       }
@@ -132,7 +135,7 @@ export const getBySlug = async (req: Request, res: Response) => {
 /* ---------- public links ---------- */
 export const listPublicLinks = async (_req: Request, res: Response) => {
   const campaigns = await CampaignModel.find()
-    .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue')
+    .select('slug fullVideoUrl fullThumbnailUrl waLink waButtonLabel popupTriggerType popupTriggerValue tags')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -144,6 +147,7 @@ export const listPublicLinks = async (_req: Request, res: Response) => {
     waButtonLabel: c.waButtonLabel,
     popupTriggerType: c.popupTriggerType,
     popupTriggerValue: c.popupTriggerValue,
+    tags: c.tags || [],
   }));
 
   res.json(links);
@@ -234,5 +238,53 @@ export const update = async (req: Request, res: Response) => {
     res.json(updated);
   } catch (err: any) {
     res.status(400).json({ message: err.errors?.[0]?.message || err.message });
+  }
+};
+
+/* ---------- SHARE LINKS GENERATOR ---------- */
+const BASE_URL = 'https://www.assetarleadvideos.name.ng/campaigns';
+
+const PLATFORMS = [
+  { name: 'facebook', label: 'Facebook' },
+  { name: 'instagram', label: 'Instagram' },
+  { name: 'whatsapp', label: 'WhatsApp' },
+  { name: 'twitter', label: 'Twitter/X' },
+  { name: 'tiktok', label: 'TikTok' },
+  { name: 'snapchat', label: 'Snapchat' },
+  { name: 'linkedin', label: 'LinkedIn' },
+  { name: 'telegram', label: 'Telegram' },
+  { name: 'email', label: 'Email' },
+];
+
+export const getShareLinks = async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+
+    // Check if campaign exists
+    const campaign = await CampaignModel.findOne({ slug });
+    if (!campaign) return res.status(404).json({ message: 'Campaign not found' });
+
+    const baseLink = `${BASE_URL}/${slug}`;
+
+    const links: Record<string, string> = {
+      direct: baseLink,
+    };
+
+    for (const platform of PLATFORMS) {
+      links[platform.name] = `${baseLink}?utm_source=${platform.name}`;
+    }
+
+    res.json({
+      campaignSlug: slug,
+      baseUrl: baseLink,
+      shareLinks: links,
+      platforms: PLATFORMS.map(p => ({
+        name: p.name,
+        label: p.label,
+        url: links[p.name],
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 };

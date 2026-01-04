@@ -9,6 +9,7 @@ export const campaignCreateSchema = z.object({
   caption: z.string().optional(),
   popupTriggerType: z.enum(['seconds', 'percent']).nullable().default(null),
   popupTriggerValue: z.number().nullable().default(null),
+  tags: z.array(z.string()).default([]),
 });
 
 export const campaignPatchSchema = campaignCreateSchema.partial();

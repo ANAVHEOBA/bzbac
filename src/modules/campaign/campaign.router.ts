@@ -9,7 +9,8 @@ import {
   listPublicLinks,
   remove,
   getMetaTags,
-  update      
+  update,
+  getShareLinks,
 } from './campaign.controller';
 import { campaignCreateSchema } from './campaign.schema';
 import { validateInput } from '../../middleware/input-validator';
@@ -39,7 +40,17 @@ campaignRouter
     uploadCampaign
   );
 
-  campaignRouter
+/* public links list - MUST be before /:slug */
+campaignRouter.get('/public/links', listPublicLinks);
+
+/* meta tags page - MUST be before /:slug */
+campaignRouter.get('/:slug/meta', getMetaTags);
+
+/* share links generator - MUST be before /:slug */
+campaignRouter.get('/:slug/share-links', getShareLinks);
+
+/* update campaign */
+campaignRouter
   .route('/:slug')
   .put(
     adminAuth,
@@ -50,14 +61,10 @@ campaignRouter
     update
   );
 
-/* public landing page */
+/* public landing page - catch-all for /:slug */
 campaignRouter.get('/:slug', getBySlug);
 
-/* public meta tags page (for link unfurl) */
-campaignRouter.get('/:slug/meta', getMetaTags);   // <-- NEW
-
-campaignRouter.get('/public/links', listPublicLinks);
-
+/* delete campaign */
 campaignRouter.delete('/:slug', adminAuth, remove);
 
 export default campaignRouter;
