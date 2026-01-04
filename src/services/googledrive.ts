@@ -110,33 +110,31 @@ export const uploadVideo = async (
 ): Promise<{ secure_url: string; thumbnail_url: string }> => {
   const baseName = publicId || `video_${Date.now()}`;
 
-  console.log(`🎬 Extracting thumbnail with ffmpeg...`);
-
-  // Extract thumbnail from video
-  let thumbnailBuffer: Buffer;
-  try {
-    thumbnailBuffer = await extractThumbnail(buffer);
-    console.log(`✅ Thumbnail extracted (${(thumbnailBuffer.length / 1024).toFixed(1)} KB)`);
-  } catch (err) {
-    console.error('⚠️ Thumbnail extraction failed, using placeholder');
-    // Create a simple placeholder - or throw error
-    throw new Error('Failed to extract thumbnail: ' + (err as Error).message);
-  }
-
+  // Upload video first (most important)
   console.log(`🚀 Uploading video to Google Drive...`);
-
-  // Upload video
   const videoFileId = await uploadFile(buffer, `${baseName}.mp4`, 'video/mp4');
   console.log(`✅ Video uploaded: ${videoFileId}`);
 
-  // Upload thumbnail
-  console.log(`🖼️ Uploading thumbnail to Google Drive...`);
-  const thumbFileId = await uploadFile(thumbnailBuffer, `${baseName}_thumb.jpg`, 'image/jpeg');
-  console.log(`✅ Thumbnail uploaded: ${thumbFileId}`);
+  // Try to extract and upload thumbnail
+  let thumbnail_url = `https://via.placeholder.com/1280x720/333/fff?text=Video`;
 
-  // Generate direct URLs
+  try {
+    console.log(`🎬 Extracting thumbnail with ffmpeg...`);
+    const thumbnailBuffer = await extractThumbnail(buffer);
+    console.log(`✅ Thumbnail extracted (${(thumbnailBuffer.length / 1024).toFixed(1)} KB)`);
+
+    console.log(`🖼️ Uploading thumbnail to Google Drive...`);
+    const thumbFileId = await uploadFile(thumbnailBuffer, `${baseName}_thumb.jpg`, 'image/jpeg');
+    console.log(`✅ Thumbnail uploaded: ${thumbFileId}`);
+
+    thumbnail_url = `https://drive.google.com/uc?export=download&id=${thumbFileId}`;
+  } catch (err) {
+    console.error('⚠️ Thumbnail extraction failed, using placeholder:', (err as Error).message);
+    // Continue with placeholder - don't fail the whole upload
+  }
+
+  // Generate video URL
   const secure_url = `https://drive.google.com/uc?export=download&id=${videoFileId}`;
-  const thumbnail_url = `https://drive.google.com/uc?export=download&id=${thumbFileId}`;
 
   return {
     secure_url,
